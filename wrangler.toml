@@ -1,0 +1,6 @@
+name = "firestore-cleanup"
+main = "src/worker.js"
+compatibility_date = "2023-12-01"
+
+[triggers]
+crons = ["*/5 * * * *"]   # run every 5 minutes
