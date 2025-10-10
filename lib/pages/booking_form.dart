@@ -26,16 +26,14 @@ class _BookingFormState extends State<BookingForm> {
   List<Map<String, String>> slotData = [];
 
   final ScrollController _scrollController = ScrollController();
-
-  /// ✅ bookedDates now holds {morning, afternoon, status}
-  Map<String, Map<String, dynamic>> bookedDates = {};
+  Map<String, Map<String, bool>> bookedDates = {};
 
   @override
   void initState() {
     super.initState();
     selectedDate = DateTime.now();
 
-    // ✅ Real-time listener
+    /// ✅ Listen to booking collection (realtime updates to calendar)
     FirebaseFirestore.instance.collection('booking').snapshots().listen((
       snapshot,
     ) {
@@ -57,6 +55,8 @@ class _BookingFormState extends State<BookingForm> {
         _generateSlotData();
       });
     });
+
+    /// ✅ Listen to events collection → auto update booking
   }
 
   DateTime _startOfToday() {
@@ -124,51 +124,47 @@ class _BookingFormState extends State<BookingForm> {
       _generateSlotData();
     });
   }
-
-  /// ✅ Halkan ayaan saxay
-  Future<void> _bookSelected() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => LoginPage()),
-      );
-      return;
-    }
-
-    final validDates = selectedDates.where((d) => !_isPastDate(d)).toList();
-    if (validDates.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select today or future dates')),
-      );
-      return;
-    }
-
-    for (var date in validDates) {
-      final shifts = selectedShifts[date] ?? {};
-      if (shifts.isEmpty) continue;
-
-      // ✅ Pass all selected shifts at once
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder:
-              (_) => AddEventPage(
-                venue: selectedVenue!,
-                date: date,
-                timeSlot: shifts.join(
-                  ", ",
-                ), // e.g. "08:00 AM - 12:00 PM, 02:00 PM - 05:00 PM"
-                eventId: '',
-                isUserMode: true,
-                selectedShifts: shifts.toList(),
-                shift:
-                    '', // 👉 waa inaad AddEventPage ka dhigtaa inuu qaato list
-              ),
-        ),
-      );
-    }
+Future<void> _bookSelected() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => LoginPage()),
+    );
+    return;
   }
+
+  final validDates = selectedDates.where((d) => !_isPastDate(d)).toList();
+  if (validDates.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Select today or future dates')),
+    );
+    return;
+  }
+
+  // ✅ Qaado maalinta ugu horeysa si AddEventPage uu u helo date/time default
+  final firstDate = validDates.first;
+  final firstShifts = selectedShifts[firstDate]?.toList() ?? [];
+
+  await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => AddEventPage(
+        venue: selectedVenue!,
+        date: firstDate,
+        timeSlot: firstShifts.join(", "),
+        eventId: '',
+        isUserMode: true,
+        shift: '',
+        selectedShifts: firstShifts,
+
+        // ✅ dir dhammaan maalmaha iyo shifts map si loo process gareeyo
+        validDates: validDates,
+        selectedShiftsMap: selectedShifts,
+      ),
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -370,32 +366,30 @@ class _BookingFormState extends State<BookingForm> {
     for (int day = 1; day <= daysInMonth; day++) {
       final date = DateTime(selectedMonth.year, selectedMonth.month, day);
       final key = "${date.year}-${date.month}-${date.day}";
-      final data = bookedDates[key];
-
-      final bool morningBooked = data?['morning'] ?? false;
-      final bool afternoonBooked = data?['afternoon'] ?? false;
+      final status = bookedDates[key];
+      bool morningBooked = status?['morning'] ?? false;
+      bool afternoonBooked = status?['afternoon'] ?? false;
 
       final bool isPast = _isPastDate(date);
       final bool isSelected = selectedDates.any((d) => _isSameDay(d, date));
-      final bool isToday = _isSameDay(date, today);
 
       Color bgColor;
       if (isPast) {
         bgColor = Colors.grey.shade300;
-      } else if (isSelected) {
-        bgColor = Colors.blue;
+      } else if (!morningBooked && !afternoonBooked) {
+        bgColor = Colors.white;
       } else if (morningBooked && afternoonBooked) {
-        bgColor = Colors.red.shade200; // fully booked
-      } else if (morningBooked || afternoonBooked) {
-        bgColor = Colors.yellow.shade200; // partially booked
+        bgColor = Colors.red.shade200;
       } else {
-        bgColor = Colors.white; // available
+        bgColor = Colors.yellow.shade200;
       }
+
+      final bool isToday = _isSameDay(date, today);
 
       Widget dayBox = Container(
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: bgColor,
+          color: isSelected ? Colors.blue : bgColor,
           borderRadius: BorderRadius.circular(6),
           border:
               isToday
@@ -476,36 +470,6 @@ class _BookingFormState extends State<BookingForm> {
                                 (slot == allSlots[0]
                                     ? slots['morning']
                                     : slots['afternoon'])!;
-
-                            bool isPastSlot = false;
-
-                            // ✅ Check haddii maanta la joogo
-                            if (_isSameDay(date, DateTime.now())) {
-                              final now = DateTime.now();
-
-                              if (slot == allSlots[0]) {
-                                // Morning slot ends 12:00 PM
-                                final end = DateTime(
-                                  now.year,
-                                  now.month,
-                                  now.day,
-                                  12,
-                                  0,
-                                );
-                                if (now.isAfter(end)) isPastSlot = true;
-                              } else if (slot == allSlots[1]) {
-                                // Afternoon slot ends 5:00 PM
-                                final end = DateTime(
-                                  now.year,
-                                  now.month,
-                                  now.day,
-                                  17,
-                                  0,
-                                );
-                                if (now.isAfter(end)) isPastSlot = true;
-                              }
-                            }
-
                             return Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -514,7 +478,7 @@ class _BookingFormState extends State<BookingForm> {
                                       selectedShifts[date]?.contains(slot) ??
                                       false,
                                   onChanged:
-                                      (isBooked || isPastSlot)
+                                      isBooked
                                           ? null
                                           : (val) {
                                             setState(() {
@@ -528,17 +492,9 @@ class _BookingFormState extends State<BookingForm> {
                                           },
                                 ),
                                 Text(
-                                  slot +
-                                      (isBooked
-                                          ? " (Booked)"
-                                          : isPastSlot
-                                          ? " (Closed)"
-                                          : ""),
+                                  slot + (isBooked ? " (Booked)" : ""),
                                   style: TextStyle(
-                                    color:
-                                        isBooked || isPastSlot
-                                            ? Colors.red
-                                            : Colors.black,
+                                    color: isBooked ? Colors.red : Colors.black,
                                   ),
                                 ),
                               ],

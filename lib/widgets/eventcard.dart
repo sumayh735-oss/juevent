@@ -1,6 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
+// ✅ Event Model
+class EventModel {
+  final String id;
+  final String title;
+  final String description;
+  final String venue;
+  final String category;
+  final String imageUrl;
+  final DateTime startDateTime;
+  final DateTime endDateTime;
+
+  EventModel({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.venue,
+    required this.category,
+    required this.imageUrl,
+    required this.startDateTime,
+    required this.endDateTime,
+  });
+
+  factory EventModel.fromMap(Map<String, dynamic> map, String id) {
+    return EventModel(
+      id: id,
+      title: map['title'] ?? '',
+      description: map['description'] ?? '',
+      venue: map['venue'] ?? '',
+      category: map['category'] ?? '',
+      imageUrl: map['imageUrl'] ?? '',
+      startDateTime: (map['startDateTime'] as Timestamp).toDate(),
+      endDateTime: (map['endDateTime'] as Timestamp).toDate(),
+    );
+  }
+}
+
+// ✅ Card UI
 class EventCard extends StatelessWidget {
   final String label;
   final String time;
@@ -9,7 +48,7 @@ class EventCard extends StatelessWidget {
   final String title;
   final String description;
   final String venue;
-  final String image; // expects URL here
+  final String image;
 
   const EventCard({
     super.key,
@@ -31,6 +70,7 @@ class EventCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ✅ Top image + overlays
           Stack(
             children: [
               ClipRRect(
@@ -121,6 +161,8 @@ class EventCard extends StatelessWidget {
               ),
             ],
           ),
+
+          // ✅ Content
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: Column(
@@ -150,6 +192,85 @@ class EventCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ✅ Section with Grid layout
+class UpcomingEventsSection extends StatelessWidget {
+  const UpcomingEventsSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream:
+          FirebaseFirestore.instance
+              .collection('events')
+              .where('status', isEqualTo: 'Approved')
+              .orderBy('startDateTime')
+              .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text("No upcoming events."),
+          );
+        }
+
+        final events =
+            snapshot.data!.docs
+                .map(
+                  (doc) => EventModel.fromMap(
+                    doc.data() as Map<String, dynamic>,
+                    doc.id,
+                  ),
+                )
+                .where((event) => event.endDateTime.isAfter(DateTime.now()))
+                .toList();
+
+        if (events.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text("No upcoming events."),
+          );
+        }
+
+        return GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 3, // ✅ 3 items per row
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: 0.65,
+          padding: const EdgeInsets.all(16),
+          children:
+              events.map((event) {
+                final dateText = DateFormat(
+                  "d MMM",
+                ).format(event.startDateTime);
+                final timeText =
+                    "${DateFormat("h:mm a").format(event.startDateTime)} - ${DateFormat("h:mm a").format(event.endDateTime)}";
+                final daysLeft =
+                    event.startDateTime.difference(DateTime.now()).inDays;
+                final daysLeftText = daysLeft <= 0 ? "0" : "$daysLeft";
+
+                return EventCard(
+                  label: event.category,
+                  time: timeText,
+                  daysLeft: daysLeftText,
+                  date: dateText,
+                  title: event.title,
+                  description: event.description,
+                  venue: event.venue,
+                  image: event.imageUrl,
+                );
+              }).toList(),
+        );
+      },
     );
   }
 }

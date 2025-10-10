@@ -178,6 +178,7 @@ class _EventsPageState extends State<EventsPage> {
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(12),
                   ),
+                  
                   child: CachedNetworkImage(
                     imageUrl: event.imageUrl,
                     height: 180,

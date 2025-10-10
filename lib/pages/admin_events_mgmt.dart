@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// events_management_with_status.dart (FINAL with Fixed Header)
+// events_management_with_status.dart (FINAL with Cancel -> Pending)
 // -----------------------------------------------------------------------------
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,27 +8,23 @@ import 'package:intl/intl.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 import 'package:withfbase/pages/add_event_page.dart';
-import 'package:withfbase/widgets/home_header.dart'; // make sure this import exists
+import 'package:withfbase/widgets/home_header.dart'; 
 
-// -----------------------------------------------------------------------------
-// SMTP Email Helper
-// -----------------------------------------------------------------------------
 Future<void> sendEmail({
   required String recipientEmail,
   required String subject,
   required String body,
 }) async {
   const String username = 'sumayh735@gmail.com';
-  const String password = 'kuqo fmer odgv awqe'; // Gmail App password
+  const String password = 'kuqo fmer odgv awqe';
 
   final smtpServer = gmail(username, password);
 
-  final message =
-      Message()
-        ..from = Address(username, 'Jazeera University Admin')
-        ..recipients.add(recipientEmail)
-        ..subject = subject
-        ..text = body;
+  final message = Message()
+    ..from = Address(username, 'Jazeera University Admin')
+    ..recipients.add(recipientEmail)
+    ..subject = subject
+    ..text = body;
 
   try {
     await send(message, smtpServer);
@@ -45,7 +41,15 @@ class AdminEventsMgmt extends StatefulWidget {
   State<AdminEventsMgmt> createState() => _AdminEventsMgmtState();
 }
 
-enum EventStatusFilter { all, pending, approved, completed, rejected }
+enum EventStatusFilter {
+  all,
+  pending,
+  approved,
+  completed,
+  rejected,
+  canceled,
+  deleted,
+}
 
 class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
   final TextEditingController _searchController = TextEditingController();
@@ -79,6 +83,10 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
         return 'Rejected';
       case 'expired':
         return 'Expired';
+      case 'canceled':
+        return 'Canceled';
+      case 'deleted':
+        return 'Deleted';
       default:
         return 'Pending';
     }
@@ -119,15 +127,26 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
             .where('status', whereIn: ['Rejected', 'rejected'])
             .orderBy('createdAt', descending: true)
             .snapshots();
+      case EventStatusFilter.canceled:
+        return coll
+            .where('status', whereIn: ['Canceled', 'canceled'])
+            .orderBy('createdAt', descending: true)
+            .snapshots();
+      case EventStatusFilter.deleted:
+        return coll
+            .where('status', whereIn: ['Deleted', 'deleted'])
+            .orderBy('createdAt', descending: true)
+            .snapshots();
       default:
         return coll.orderBy('startDateTime').snapshots();
     }
   }
 
-  // Approve
-  Future<void> _approveEvent(
-    DocumentSnapshot<Map<String, dynamic>> snap,
-  ) async {
+  // ---------------------------------------------------------------------------
+  // ACTION METHODS
+  // ---------------------------------------------------------------------------
+
+  Future<void> _approveEvent(DocumentSnapshot<Map<String, dynamic>> snap) async {
     final data = snap.data();
     if (data == null) return;
 
@@ -142,22 +161,16 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
       await sendEmail(
         recipientEmail: email,
         subject: 'Event Approved',
-        body:
-            'Dear organizer,\n\nYour event "${data['title']}" has been approved.',
+        body: 'Dear organizer,\n\nYour event "${data['title']}" has been approved.',
       );
     }
 
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Event approved')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event approved')));
     }
   }
 
-  // Complete
-  Future<void> _completeEvent(
-    DocumentSnapshot<Map<String, dynamic>> snap,
-  ) async {
+  Future<void> _completeEvent(DocumentSnapshot<Map<String, dynamic>> snap) async {
     final data = snap.data();
     if (data == null) return;
 
@@ -172,8 +185,7 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
       await sendEmail(
         recipientEmail: email,
         subject: 'Event Completed',
-        body:
-            'Dear organizer,\n\nYour event "${data['title']}" has been marked as Completed.',
+        body: 'Dear organizer,\n\nYour event "${data['title']}" has been marked as Completed.',
       );
     }
 
@@ -184,29 +196,27 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
     }
   }
 
-  // Reject
   Future<void> _rejectEvent(DocumentSnapshot<Map<String, dynamic>> snap) async {
     final reasonCtrl = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: const Text('Reject Reason'),
-            content: TextField(
-              controller: reasonCtrl,
-              decoration: const InputDecoration(hintText: 'Enter reason...'),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, null),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, reasonCtrl.text.trim()),
-                child: const Text('Reject'),
-              ),
-            ],
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reject Reason'),
+        content: TextField(
+          controller: reasonCtrl,
+          decoration: const InputDecoration(hintText: 'Enter reason...'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancel'),
           ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, reasonCtrl.text.trim()),
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
     );
     if (reason == null || reason.isEmpty) return;
 
@@ -224,98 +234,66 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
       await sendEmail(
         recipientEmail: email,
         subject: 'Event Rejected',
-        body:
-            'Dear organizer,\n\nYour event "${data['title']}" was rejected.\nReason: $reason',
+        body: 'Dear organizer,\n\nYour event "${data['title']}" was rejected.\nReason: $reason',
       );
     }
 
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Event rejected')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event rejected')));
     }
   }
 
-  // Expire Approved if time passed
+  // ---------------------------------------------------------------------------
+  // CANCEL -> PENDING
+  // ---------------------------------------------------------------------------
+  Future<void> _cancelEvent(DocumentSnapshot<Map<String, dynamic>> snap) async {
+    final data = snap.data();
+    if (data == null) return;
+
+    await snap.reference.update({'status': 'Pending'});
+
+    // Force UI refresh
+    setState(() {});
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Event status reverted to Pending')),
+      );
+    }
+  }
+
+  Future<void> _deleteEvent(DocumentSnapshot<Map<String, dynamic>> snap) async {
+    final data = snap.data();
+    if (data == null) return;
+
+    await snap.reference.update({'status': 'Deleted'});
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Event deleted')),
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // EXPIRY + REMINDERS (kept as before)
+  // ---------------------------------------------------------------------------
   Future<void> expireApprovedEvents() async {
     final now = DateTime.now();
-
     try {
-      final querySnapshot =
-          await FirebaseFirestore.instance
-              .collection('events')
-              .where('status', isEqualTo: 'Approved')
-              .get();
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('events')
+          .where('status', isEqualTo: 'Approved')
+          .get();
 
       for (final doc in querySnapshot.docs) {
         final data = doc.data();
-
-        DateTime? endDateTime;
-        final rawEnd = data['endDateTime'];
-
-        if (rawEnd is Timestamp) {
-          endDateTime = rawEnd.toDate();
-        } else if (rawEnd is String) {
-          endDateTime = DateTime.tryParse(rawEnd);
-        }
-
+        final endDateTime = (data['endDateTime'] as Timestamp?)?.toDate();
         if (endDateTime == null) continue;
 
-        final currentStatus = (data['status'] ?? '').toString().toLowerCase();
-
-        if (currentStatus == 'approved' && endDateTime.isBefore(now)) {
+        if (endDateTime.isBefore(now)) {
           await doc.reference.update({'status': 'Expired'});
           debugPrint('⚠️ Event expired: ${data['title'] ?? doc.id}');
-
-          final organizerId = data['organizerId'];
-          if (organizerId != null) {
-            final userRef = FirebaseFirestore.instance
-                .collection('users')
-                .doc(organizerId);
-            final userDoc = await userRef.get();
-
-            if (userDoc.exists) {
-              final userData = userDoc.data();
-              int expiredCount = (userData?['expiredCount'] ?? 0) + 1;
-
-              final Map<String, dynamic> updateData = {
-                'expiredCount': expiredCount,
-                'updatedAt': FieldValue.serverTimestamp(),
-              };
-
-              if (expiredCount >= 3) {
-                updateData['blacklisted'] = true;
-                updateData['blockedAt'] = FieldValue.serverTimestamp();
-
-                final userEmail = userData?['email'] ?? '';
-                final userName = userData?['fullName'] ?? 'Organizer';
-
-                if (userEmail.isNotEmpty) {
-                  await sendEmail(
-                    recipientEmail: userEmail,
-                    subject: 'Account Blacklisted - Jazeera University',
-                    body: '''
-Hello $userName,
-
-Your account has been BLACKLISTED due to 3 or more expired events.
-
-You are no longer allowed to create or manage new events until further notice.
-
-If you believe this is a mistake, please contact the administrator.
-
--- Jazeera University Admin
-''',
-                  );
-                }
-
-                debugPrint(
-                  "🚫 User $organizerId blacklisted after $expiredCount expired events",
-                );
-              }
-
-              await userRef.update(updateData);
-            }
-          }
         }
       }
     } catch (e) {
@@ -323,13 +301,11 @@ If you believe this is a mistake, please contact the administrator.
     }
   }
 
-  // Reminder Emails
   Future<void> checkAndSendReminders() async {
-    final querySnapshot =
-        await FirebaseFirestore.instance
-            .collection('events')
-            .where('status', isEqualTo: 'Approved')
-            .get();
+    final querySnapshot = await FirebaseFirestore.instance
+        .collection('events')
+        .where('status', isEqualTo: 'Approved')
+        .get();
 
     for (final doc in querySnapshot.docs) {
       final data = doc.data();
@@ -346,13 +322,16 @@ If you believe this is a mistake, please contact the administrator.
         await sendEmail(
           recipientEmail: data['organizerEmail'] ?? '',
           subject: 'Event Reminder',
-          body:
-              'Reminder: Your event "${data['title']}" is starting soon (${startDate.toLocal()}).',
+          body: 'Reminder: Your event "${data['title']}" is starting soon (${startDate.toLocal()}).',
         );
         await doc.reference.update({'reminderSent': true});
       }
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // UI BUILD
+  // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -368,11 +347,10 @@ If you believe this is a mistake, please contact the administrator.
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(120),
         child: Builder(
-          builder:
-              (context) => HomeHeader(
-                onMenuTap: () => Scaffold.of(context).openEndDrawer(),
-                title: 'Events Management',
-              ),
+          builder: (context) => HomeHeader(
+            onMenuTap: () => Scaffold.of(context).openEndDrawer(),
+            title: 'Events Management',
+          ),
         ),
       ),
       body: Padding(
@@ -400,16 +378,15 @@ If you believe this is a mistake, please contact the administrator.
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder:
-                            (_) => AddEventPage(
-                              venue: '',
-                              date: DateTime.now(),
-                              timeSlot: '',
-                              eventId: '',
-                              isUserMode: false,
-                              shift: '',
-                              selectedShifts: [],
-                            ),
+                        builder: (_) => AddEventPage(
+                          venue: '',
+                          date: DateTime.now(),
+                          timeSlot: '',
+                          eventId: '',
+                          isUserMode: false,
+                          shift: '',
+                          selectedShifts: [],
+                        ),
                       ),
                     );
                   },
@@ -426,21 +403,12 @@ If you believe this is a mistake, please contact the administrator.
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: _eventsStream(),
                 builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    debugPrint("❌ Firestore error: ${snapshot.error}");
-                    return Text('Error: ${snapshot.error}');
-                  }
-                  if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+                  if (snapshot.hasError) return Text('Error: ${snapshot.error}');
+                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
-                  final docs =
-                      snapshot.data!.docs
-                          .where(
-                            (doc) =>
-                                _matchesSearch(doc.data()['title'] as String?),
-                          )
-                          .toList();
+                  final docs = snapshot.data!.docs
+                      .where((doc) => _matchesSearch(doc.data()['title'] as String?))
+                      .toList();
 
                   if (docs.isEmpty) {
                     return const Padding(
@@ -455,10 +423,7 @@ If you believe this is a mistake, please contact the administrator.
                       final snap = docs[index];
                       final data = snap.data();
                       final start = _parseDate(data['startDateTime']);
-                      final formatted =
-                          start != null
-                              ? DateFormat('yyyy-MM-dd').format(start)
-                              : 'N/A';
+                      final formatted = start != null ? DateFormat('yyyy-MM-dd').format(start) : 'N/A';
 
                       return _EventRow(
                         snap: snap,
@@ -471,6 +436,8 @@ If you believe this is a mistake, please contact the administrator.
                         onApprove: _approveEvent,
                         onComplete: _completeEvent,
                         onReject: _rejectEvent,
+                        onCancel: _cancelEvent,
+                        onDelete: _deleteEvent,
                       );
                     },
                   );
@@ -500,6 +467,8 @@ If you believe this is a mistake, please contact the administrator.
         chip('Approved', EventStatusFilter.approved),
         chip('Completed', EventStatusFilter.completed),
         chip('Rejected', EventStatusFilter.rejected),
+        chip('Canceled', EventStatusFilter.canceled),
+        chip('Deleted', EventStatusFilter.deleted),
       ],
     );
   }
@@ -528,6 +497,8 @@ class _EventRow extends StatelessWidget {
   final void Function(DocumentSnapshot<Map<String, dynamic>> snap) onApprove;
   final void Function(DocumentSnapshot<Map<String, dynamic>> snap) onComplete;
   final void Function(DocumentSnapshot<Map<String, dynamic>> snap) onReject;
+  final void Function(DocumentSnapshot<Map<String, dynamic>> snap) onCancel;
+  final void Function(DocumentSnapshot<Map<String, dynamic>> snap) onDelete;
 
   const _EventRow({
     required this.snap,
@@ -540,20 +511,19 @@ class _EventRow extends StatelessWidget {
     required this.onApprove,
     required this.onComplete,
     required this.onReject,
+    required this.onCancel,
+    required this.onDelete,
   });
 
   Color _statusColor(String s) {
     switch (s.toLowerCase()) {
-      case 'approved':
-        return Colors.green;
-      case 'completed':
-        return Colors.blue;
-      case 'rejected':
-        return Colors.red;
-      case 'expired':
-        return Colors.black54;
-      default:
-        return Colors.orange;
+      case 'approved': return Colors.green;
+      case 'completed': return Colors.blue;
+      case 'rejected': return Colors.red;
+      case 'expired': return Colors.black54;
+      case 'canceled': return Colors.grey;
+      case 'deleted': return Colors.brown;
+      default: return Colors.orange;
     }
   }
 
@@ -561,6 +531,9 @@ class _EventRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final pending = status.toLowerCase() == 'pending';
     final approved = status.toLowerCase() == 'approved';
+    final complete = status.toLowerCase() == 'completed';
+    final rejected = status.toLowerCase() == 'rejected';
+    final canceled = status.toLowerCase() == 'canceled';
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -587,26 +560,24 @@ class _EventRow extends StatelessWidget {
                 if (val == 'approve') onApprove(snap);
                 if (val == 'complete') onComplete(snap);
                 if (val == 'reject') onReject(snap);
+                if (val == 'cancel') onCancel(snap);
+                if (val == 'delete') onDelete(snap);
               },
-              itemBuilder:
-                  (_) => [
-                    if (pending) ...[
-                      const PopupMenuItem(
-                        value: 'approve',
-                        child: Text('Approve'),
-                      ),
-                      const PopupMenuItem(
-                        value: 'reject',
-                        child: Text('Reject'),
-                      ),
-                    ],
-                    if (approved) ...[
-                      const PopupMenuItem(
-                        value: 'complete',
-                        child: Text('Complete'),
-                      ),
-                    ],
-                  ],
+              itemBuilder: (_) => [
+                if (pending || canceled || rejected) ...[
+                  const PopupMenuItem(value: 'approve', child: Text('Approve')),
+                  const PopupMenuItem(value: 'reject', child: Text('Reject')),
+                  const PopupMenuItem(value: 'cancel', child: Text('Cancel')),
+                  const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                ],
+                if (approved) ...[
+                  const PopupMenuItem(value: 'complete', child: Text('Complete')),
+                  const PopupMenuItem(value: 'cancel', child: Text('Cancel')),
+                ],
+                if (complete) ...[
+                  const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                ],
+              ],
             ),
           ),
         ],

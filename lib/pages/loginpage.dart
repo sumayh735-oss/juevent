@@ -1,10 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:withfbase/pages/footer.dart';
 import 'package:withfbase/pages/main_admin_page.dart';
 import 'package:withfbase/pages/main_page.dart';
+import 'package:withfbase/services/privacy_policypage.dart';
 import 'package:withfbase/widgets/home_header.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginPage extends StatefulWidget {
   final bool isAdminLogin;
@@ -18,86 +19,102 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final FocusNode _passwordFocus = FocusNode();
+  final FocusNode _emailFocus = FocusNode();
+
   bool _isLoading = false;
-  String role = 'guest'; // default role, tusaale ahaan
+  bool _acceptedPolicy = false;
+  bool _obscurePassword = true;
+
+  String? _emailError;
+  String? _passwordError;
+
   @override
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _passwordFocus.dispose();
+    _emailFocus.dispose();
     super.dispose();
   }
 
+  void _openPolicy() {
+    showDialog(
+      context: context,
+      builder: (context) => const PolicyTermsDialog(),
+    );
+  }
+
   void _handleLogin() async {
-    if (_formKey.currentState!.validate()) {
-      final email = _usernameController.text.trim();
-      final password = _passwordController.text.trim();
+    if (!_formKey.currentState!.validate()) return;
 
-      setState(() {
-        _isLoading = true;
-      });
+    if (!_acceptedPolicy) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Fadlan aqbal Privacy Policy kahor login.")),
+      );
+      return;
+    }
 
-      try {
-        // Login user with FirebaseAuth
-        UserCredential userCredential = await FirebaseAuth.instance
-            .signInWithEmailAndPassword(email: email, password: password);
+    final email = _usernameController.text.trim();
+    final password = _passwordController.text.trim();
 
-        User? user = userCredential.user;
+    setState(() {
+      _isLoading = true;
+      _emailError = null;
+      _passwordError = null;
+    });
 
-        if (user != null) {
-          // Fetch user data from Firestore to check role
-          final userDoc =
-              await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(user.uid)
-                  .get();
+    try {
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
 
-          if (!userDoc.exists) {
-            throw FirebaseAuthException(
-              code: 'user-data-missing',
-              message: 'User data not found in database.',
-            );
-          }
+      User? user = userCredential.user;
+      if (user == null) throw FirebaseAuthException(code: 'user-not-found');
 
-          final role = userDoc.data()!['role'];
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (!userDoc.exists) throw FirebaseAuthException(code: 'user-data-missing');
 
-          // Redirect based on role (admin or user)
-          if (role == 'admin') {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const MainAdminPage(initialIndex: 0),
-              ),
-              (route) => false,
-            );
-          } else {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const MainPage(initialIndex: 0),
-              ),
-              (route) => false,
-            );
-          }
-        }
-      } on FirebaseAuthException catch (e) {
-        String message = 'Login failed: ${e.message}';
+      final role = userDoc.data()?['role'] ?? 'guest';
 
-        // Customize error messages
-        if (e.code == 'user-not-found') {
-          message = 'No user found for that email.';
-        } else if (e.code == 'wrong-password') {
-          message = 'Wrong password provided.';
-        }
-
-        // Show error message
-        ScaffoldMessenger.of(
+      if (role == 'admin') {
+        Navigator.pushAndRemoveUntil(
           context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-      } finally {
-        setState(() {
-          _isLoading = false;
-        });
+          MaterialPageRoute(builder: (_) => const MainAdminPage(initialIndex: 0)),
+          (route) => false,
+        );
+      } else {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const MainPage(initialIndex: 0)),
+          (route) => false,
+        );
       }
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _emailError = null;
+        _passwordError = null;
+
+        // User-friendly messages
+        switch (e.code) {
+          case 'wrong-password':
+            _passwordError = 'Password-kaaga waa khalad, fadlan ku qor si sax ah';
+            _passwordFocus.requestFocus();
+            break;
+          case 'user-not-found':
+            _emailError = 'Email-kan lama helin, fadlan hubi';
+            _emailFocus.requestFocus();
+            break;
+          case 'invalid-email':
+            _emailError = 'Email-kan waa mid aan sax ahayn';
+            _emailFocus.requestFocus();
+            break;
+          default:
+            _passwordError = "ncorrect password, please enter valid password";
+            _passwordFocus.requestFocus();
+        }
+      });
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -112,7 +129,7 @@ class _LoginPageState extends State<LoginPage> {
         children: [
           Scrollbar(
             thumbVisibility: true,
-            thickness: 6.0,
+            thickness: 6,
             radius: const Radius.circular(10),
             child: SingleChildScrollView(
               padding: const EdgeInsets.only(top: 100, bottom: 40),
@@ -134,7 +151,6 @@ class _LoginPageState extends State<LoginPage> {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            // Logo
                             Container(
                               width: 50,
                               height: 50,
@@ -155,64 +171,109 @@ class _LoginPageState extends State<LoginPage> {
                             const SizedBox(height: 16),
                             const Text(
                               'Login',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 8),
                             const Text('JU', textAlign: TextAlign.center),
                             const SizedBox(height: 24),
-                            // Email input field
+
+                            // Email Field
                             TextFormField(
                               controller: _usernameController,
-                              decoration: const InputDecoration(
+                              focusNode: _emailFocus,
+                              decoration: InputDecoration(
                                 labelText: 'Email',
-                                prefixIcon: Icon(Icons.person_outline),
-                                border: OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.person_outline),
+                                border: const OutlineInputBorder(),
+                                errorText: _emailError,
                               ),
-                              validator:
-                                  (value) =>
-                                      value == null || value.isEmpty
-                                          ? 'Please enter your email'
-                                          : null,
+                              validator: (value) =>
+                                  value == null || value.isEmpty ? 'Fadlan geli email-kaaga' : null,
+                              onChanged: (_) {
+                                if (_emailError != null) setState(() => _emailError = null);
+                              },
                             ),
                             const SizedBox(height: 16),
-                            // Password input field
+
+                            // Password Field
                             TextFormField(
                               controller: _passwordController,
-                              obscureText: true,
-                              decoration: const InputDecoration(
+                              obscureText: _obscurePassword,
+                              focusNode: _passwordFocus,
+                              decoration: InputDecoration(
                                 labelText: 'Password',
-                                prefixIcon: Icon(Icons.lock_outline),
-                                suffixIcon: Icon(Icons.visibility),
-                                border: OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.lock_outline),
+                                border: const OutlineInputBorder(),
+                                errorText: _passwordError,
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                                  ),
+                                  onPressed: () {
+                                    setState(() => _obscurePassword = !_obscurePassword);
+                                  },
+                                ),
                               ),
-                              validator:
-                                  (value) =>
-                                      value == null || value.isEmpty
-                                          ? 'Please enter your password'
-                                          : null,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Fadlan geli password-kaaga';
+                                }
+                                return null;
+                              },
+                              onChanged: (_) {
+                                if (_passwordError != null) setState(() => _passwordError = null);
+                              },
                             ),
-                            const SizedBox(height: 24),
-                            // Loading spinner or Login button
+                            const SizedBox(height: 16),
+
+                            // Privacy Policy
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Checkbox(
+                                  value: _acceptedPolicy,
+                                  onChanged: (val) {
+                                    setState(() => _acceptedPolicy = val ?? false);
+                                  },
+                                ),
+                                Expanded(
+                                  child: Wrap(
+                                    children: [
+                                      const Text("I accept the "),
+                                      GestureDetector(
+                                        onTap: _openPolicy,
+                                        child: const Text(
+                                          "Privacy Policy and Terms & Conditions",
+                                          style: TextStyle(
+                                            color: Colors.blue,
+                                            decoration: TextDecoration.underline,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Login Button
                             _isLoading
                                 ? const CircularProgressIndicator()
                                 : SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton(
-                                    onPressed: _handleLogin,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue,
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 16,
+                                    width: double.infinity,
+                                    child: ElevatedButton(
+                                      onPressed: _handleLogin,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.blue,
+                                        padding: const EdgeInsets.symmetric(vertical: 16),
                                       ),
+                                      child: const Text('Login'),
                                     ),
-                                    child: const Text('Login'),
                                   ),
-                                ),
                             const SizedBox(height: 16),
-                            // Signup redirect
+
+                            // Signup
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -239,11 +300,10 @@ class _LoginPageState extends State<LoginPage> {
             left: 0,
             right: 0,
             child: Builder(
-              builder:
-                  (context) => HomeHeader(
-                    onMenuTap: () => Scaffold.of(context).openEndDrawer(),
-                    title: '',
-                  ),
+              builder: (context) => HomeHeader(
+                onMenuTap: () => Scaffold.of(context).openEndDrawer(),
+                title: '',
+              ),
             ),
           ),
         ],

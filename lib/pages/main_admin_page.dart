@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:withfbase/pages/admin_events_mgmt.dart';
 import 'package:withfbase/pages/admin_venues_mgmt_page.dart';
 import 'package:withfbase/pages/admindashboard.dart';
+import 'package:withfbase/pages/categories_page.dart';
 import 'package:withfbase/pages/homepage.dart';
-import 'package:withfbase/pages/report_page.dart';
 import 'package:withfbase/widgets/BlockedUsersPage.dart';
 import 'package:withfbase/widgets/adminDrawer.dart';
 import 'package:withfbase/pages/report2.dart';
@@ -25,8 +25,8 @@ class _MainAdminPageState extends State<MainAdminPage> {
     AdminEventsMgmt(), // 2
     AdminVenuesMgmtPage(), // 3
     BlockedUsersPage(), // 4
-    ReportPage(), // 5
-    FullEventReportPage(), //6
+    FullEventReportPage(), //5
+    AdminCategoriesPage(),
   ];
 
   @override
@@ -89,13 +89,14 @@ class _MainAdminPageState extends State<MainAdminPage> {
                     icon: Icon(Icons.block),
                     label: 'Blocked',
                   ),
+               
                   BottomNavigationBarItem(
                     icon: Icon(Icons.bar_chart),
                     label: 'Reports',
                   ),
-                  BottomNavigationBarItem(
+                   BottomNavigationBarItem(
                     icon: Icon(Icons.bar_chart),
-                    label: 'ReportsT',
+                    label: 'Categories',
                   ),
                 ],
               ),

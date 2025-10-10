@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// events_management_with_status.dart (FINAL - No Delete Option Anywhere)
+// events_management_with_status.dart (FINAL - All Statuses, No Delete Anywhere)
 // -----------------------------------------------------------------------------
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -18,25 +18,27 @@ Future<void> sendEmail({
   required String body,
 }) async {
   const String username = 'sumayh735@gmail.com';
-  const String password = 'kuqo fmer odgv awqe'; // Gmail App password
+  const String password = 'kuqo fmer odgv awqe'; // Gmail App Password
 
   final smtpServer = gmail(username, password);
 
-  final message =
-      Message()
-        ..from = Address(username, 'Jazeera University Admin')
-        ..recipients.add(recipientEmail)
-        ..subject = subject
-        ..text = body;
+  final message = Message()
+    ..from = Address(username, 'Jazeera University Admin')
+    ..recipients.add(recipientEmail)
+    ..subject = subject
+    ..text = body;
 
   try {
     await send(message, smtpServer);
-    debugPrint('✅ SMTP: Email sent to $recipientEmail');
+    debugPrint('✅ Email sent to $recipientEmail');
   } catch (e) {
-    debugPrint('❌ SMTP error: $e');
+    debugPrint('❌ Email send error: $e');
   }
 }
 
+// -----------------------------------------------------------------------------
+// MAIN PAGE
+// -----------------------------------------------------------------------------
 class EventsManagementPage extends StatefulWidget {
   const EventsManagementPage({super.key});
 
@@ -44,7 +46,7 @@ class EventsManagementPage extends StatefulWidget {
   State<EventsManagementPage> createState() => _EventsManagementPageState();
 }
 
-enum EventStatusFilter { all, pending, approved, completed, rejected }
+enum EventStatusFilter { all, pending, approved, completed, rejected, canceled, expired }
 
 class _EventsManagementPageState extends State<EventsManagementPage> {
   final TextEditingController _searchController = TextEditingController();
@@ -57,7 +59,6 @@ class _EventsManagementPageState extends State<EventsManagementPage> {
     _searchController.addListener(() {
       setState(() => _searchTerm = _searchController.text.toLowerCase());
     });
-    expireApprovedEvents();
     checkAndSendReminders();
   }
 
@@ -67,15 +68,18 @@ class _EventsManagementPageState extends State<EventsManagementPage> {
     super.dispose();
   }
 
-  String _normalizedStatus(String? raw) {
+  String _normalizeStatus(String? raw) {
     if (raw == null) return 'Pending';
-    switch (raw.toLowerCase()) {
+    final lower = raw.toLowerCase();
+    switch (lower) {
       case 'approved':
         return 'Approved';
       case 'completed':
         return 'Completed';
       case 'rejected':
         return 'Rejected';
+      case 'canceled':
+        return 'Canceled';
       case 'expired':
         return 'Expired';
       default:
@@ -83,134 +87,76 @@ class _EventsManagementPageState extends State<EventsManagementPage> {
     }
   }
 
-  bool _matchesSearch(String? title) {
-    if (title == null) return false;
-    return title.toLowerCase().contains(_searchTerm);
-  }
+  bool _matchesSearch(String? title) =>
+      title?.toLowerCase().contains(_searchTerm) ?? false;
 
   DateTime? _parseDate(dynamic raw) {
-    if (raw == null) return null;
     if (raw is Timestamp) return raw.toDate();
     if (raw is String) return DateTime.tryParse(raw);
     return null;
   }
 
+  // ---------------------------------------------------------------------------
+  // Firestore Stream by Filter
+  // ---------------------------------------------------------------------------
   Stream<QuerySnapshot<Map<String, dynamic>>> _eventsStream() {
     final coll = FirebaseFirestore.instance.collection('events');
     switch (_filter) {
       case EventStatusFilter.pending:
-        return coll
-            .where('status', whereIn: ['Pending', 'pending'])
-            .orderBy('createdAt', descending: true)
-            .snapshots();
+        return coll.where('status', whereIn: ['Pending', 'pending']).snapshots();
       case EventStatusFilter.approved:
-        return coll
-            .where('status', whereIn: ['Approved', 'approved'])
-            .orderBy('startDateTime')
-            .snapshots();
+        return coll.where('status', whereIn: ['Approved', 'approved']).snapshots();
       case EventStatusFilter.completed:
-        return coll
-            .where('status', whereIn: ['Completed', 'completed'])
-            .orderBy('startDateTime')
-            .snapshots();
+        return coll.where('status', whereIn: ['Completed', 'completed']).snapshots();
       case EventStatusFilter.rejected:
-        return coll
-            .where('status', whereIn: ['Rejected', 'rejected'])
-            .orderBy('createdAt', descending: true)
-            .snapshots();
+        return coll.where('status', whereIn: ['Rejected', 'rejected']).snapshots();
+      case EventStatusFilter.canceled:
+        return coll.where('status', whereIn: ['Canceled', 'canceled']).snapshots();
+      case EventStatusFilter.expired:
+        return coll.where('status', whereIn: ['Expired', 'expired']).snapshots();
       default:
         return coll.orderBy('startDateTime').snapshots();
     }
   }
 
-  // Approve
-  Future<void> _approveEvent(
-    DocumentSnapshot<Map<String, dynamic>> snap,
-  ) async {
+  // ---------------------------------------------------------------------------
+  // STATUS ACTIONS
+  // ---------------------------------------------------------------------------
+  Future<void> _approveEvent(DocumentSnapshot<Map<String, dynamic>> snap) async {
     final data = snap.data();
     if (data == null) return;
-
     await snap.reference.update({
       'status': 'Approved',
       'approvedAt': FieldValue.serverTimestamp(),
       'approvedBy': FirebaseAuth.instance.currentUser?.uid,
     });
-
-    final email = (data['organizerEmail'] ?? '') as String;
-    if (email.isNotEmpty) {
-      await sendEmail(
-        recipientEmail: email,
-        subject: 'Event Approved',
-        body:
-            'Dear organizer,\n\nYour event "${data['title']}" has been approved.',
-      );
-    }
-
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Event approved')));
-    }
+    await sendEmail(
+      recipientEmail: data['organizerEmail'] ?? '',
+      subject: 'Event Approved',
+      body: 'Dear organizer,\n\nYour event "${data['title']}" has been approved.',
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Event Approved')),
+    );
   }
 
-  // Complete
-  Future<void> _completeEvent(
-    DocumentSnapshot<Map<String, dynamic>> snap,
-  ) async {
-    final data = snap.data();
-    if (data == null) return;
-
-    await snap.reference.update({
-      'status': 'Completed',
-      'completedAt': FieldValue.serverTimestamp(),
-      'completedBy': FirebaseAuth.instance.currentUser?.uid,
-    });
-
-    final email = (data['organizerEmail'] ?? '') as String;
-    if (email.isNotEmpty) {
-      await sendEmail(
-        recipientEmail: email,
-        subject: 'Event Completed',
-        body:
-            'Dear organizer,\n\nYour event "${data['title']}" has been marked as Completed.',
-      );
-    }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Event marked as Completed')),
-      );
-    }
-  }
-
-  // Reject
   Future<void> _rejectEvent(DocumentSnapshot<Map<String, dynamic>> snap) async {
     final reasonCtrl = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: const Text('Reject Reason'),
-            content: TextField(
-              controller: reasonCtrl,
-              decoration: const InputDecoration(hintText: 'Enter reason...'),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, null),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, reasonCtrl.text.trim()),
-                child: const Text('Reject'),
-              ),
-            ],
-          ),
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reject Reason'),
+        content: TextField(
+          controller: reasonCtrl,
+          decoration: const InputDecoration(hintText: 'Enter reason...'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, reasonCtrl.text.trim()), child: const Text('Reject')),
+        ],
+      ),
     );
     if (reason == null || reason.isEmpty) return;
-
-    final data = snap.data();
-    if (data == null) return;
 
     await snap.reference.update({
       'status': 'Rejected',
@@ -218,144 +164,91 @@ class _EventsManagementPageState extends State<EventsManagementPage> {
       'rejectedReason': reason,
     });
 
-    final email = (data['organizerEmail'] ?? '') as String;
-    if (email.isNotEmpty) {
+    final data = snap.data();
+    if (data != null) {
       await sendEmail(
-        recipientEmail: email,
+        recipientEmail: data['organizerEmail'] ?? '',
         subject: 'Event Rejected',
         body:
             'Dear organizer,\n\nYour event "${data['title']}" was rejected.\nReason: $reason',
       );
     }
-
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Event rejected')));
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Event Rejected')),
+    );
   }
 
-  // Expire Approved if time passed
-  Future<void> expireApprovedEvents() async {
-    final now = DateTime.now();
-
-    try {
-      final querySnapshot =
-          await FirebaseFirestore.instance
-              .collection('events')
-              .where('status', isEqualTo: 'Approved')
-              .get();
-
-      for (final doc in querySnapshot.docs) {
-        final data = doc.data();
-
-        DateTime? endDateTime;
-        final rawEnd = data['endDateTime'];
-
-        if (rawEnd is Timestamp) {
-          endDateTime = rawEnd.toDate();
-        } else if (rawEnd is String) {
-          endDateTime = DateTime.tryParse(rawEnd);
-        }
-
-        if (endDateTime == null) continue;
-
-        final currentStatus = (data['status'] ?? '').toString().toLowerCase();
-
-        // ✅ expire only if still Approved
-        if (currentStatus == 'approved' && endDateTime.isBefore(now)) {
-          await doc.reference.update({'status': 'Expired'});
-          debugPrint('⚠️ Event expired: ${data['title'] ?? doc.id}');
-
-          // --- Update organizer user doc ---
-          final organizerId = data['organizerId'];
-          if (organizerId != null) {
-            final userRef = FirebaseFirestore.instance
-                .collection('users')
-                .doc(organizerId);
-            final userDoc = await userRef.get();
-
-            if (userDoc.exists) {
-              final userData = userDoc.data();
-              int expiredCount = (userData?['expiredCount'] ?? 0) + 1;
-
-              final Map<String, dynamic> updateData = {
-                'expiredCount': expiredCount,
-                'updatedAt': FieldValue.serverTimestamp(),
-              };
-
-              // ✅ if user hit 3+ expired events → blacklist automatically
-              if (expiredCount >= 3) {
-                updateData['blacklisted'] = true;
-                updateData['blockedAt'] = FieldValue.serverTimestamp();
-
-                final userEmail = userData?['email'] ?? '';
-                final userName = userData?['fullName'] ?? 'Organizer';
-
-                if (userEmail.isNotEmpty) {
-                  await sendEmail(
-                    recipientEmail: userEmail,
-                    subject: 'Account Blacklisted - Jazeera University',
-                    body: '''
-Hello $userName,
-
-Your account has been BLACKLISTED due to 3 or more expired events.
-
-You are no longer allowed to create or manage new events until further notice.
-
-If you believe this is a mistake, please contact the administrator.
-
--- Jazeera University Admin
-''',
-                  );
-                }
-
-                debugPrint(
-                  "🚫 User $organizerId blacklisted after $expiredCount expired events",
-                );
-              }
-
-              await userRef.update(updateData);
-            }
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('❌ Error expiring events: $e');
-    }
+  Future<void> _completeEvent(DocumentSnapshot<Map<String, dynamic>> snap) async {
+    final data = snap.data();
+    if (data == null) return;
+    await snap.reference.update({
+      'status': 'Completed',
+      'completedAt': FieldValue.serverTimestamp(),
+      'completedBy': FirebaseAuth.instance.currentUser?.uid,
+    });
+    await sendEmail(
+      recipientEmail: data['organizerEmail'] ?? '',
+      subject: 'Event Completed',
+      body: 'Dear organizer,\n\nYour event "${data['title']}" is now marked as completed.',
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Event Completed')),
+    );
   }
 
-  // Reminder Emails
+  Future<void> _cancelEvent(DocumentSnapshot<Map<String, dynamic>> snap) async {
+    final data = snap.data();
+    if (data == null) return;
+
+    await snap.reference.update({
+      'status': 'Pending',
+      'canceledAt': FieldValue.serverTimestamp(),
+    });
+
+    await sendEmail(
+      recipientEmail: data['organizerEmail'] ?? '',
+      subject: 'Event Reverted to Pending',
+      body:
+          'Dear organizer,\n\nYour event "${data['title']}" has been reverted back to Pending by the admin.',
+    );
+
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Event reverted to Pending')),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reminder
+  // ---------------------------------------------------------------------------
   Future<void> checkAndSendReminders() async {
-    final querySnapshot =
-        await FirebaseFirestore.instance
-            .collection('events')
-            .where('status', isEqualTo: 'Approved')
-            .get();
+    final query = await FirebaseFirestore.instance
+        .collection('events')
+        .where('status', isEqualTo: 'Approved')
+        .get();
 
-    for (final doc in querySnapshot.docs) {
+    for (final doc in query.docs) {
       final data = doc.data();
-      DateTime? startDate;
       final rawStart = data['startDateTime'];
-
-      if (rawStart is Timestamp) {
-        startDate = rawStart.toDate();
-      } else if (rawStart is String) {
-        startDate = DateTime.tryParse(rawStart);
-      }
+      DateTime? startDate;
+      if (rawStart is Timestamp) startDate = rawStart.toDate();
+      else if (rawStart is String) startDate = DateTime.tryParse(rawStart);
 
       if (startDate != null && (data['reminderSent'] != true)) {
         await sendEmail(
           recipientEmail: data['organizerEmail'] ?? '',
           subject: 'Event Reminder',
           body:
-              'Reminder: Your event "${data['title']}" is starting soon (${startDate.toLocal()}).',
+              'Reminder: Your event "${data['title']}" is starting soon (${DateFormat('yyyy-MM-dd HH:mm').format(startDate)}).',
         );
         await doc.reference.update({'reminderSent': true});
       }
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // BUILD
+  // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -363,10 +256,8 @@ If you believe this is a mistake, please contact the administrator.
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Events Management',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-          ),
+          const Text('Events Management',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -376,9 +267,7 @@ If you believe this is a mistake, please contact the administrator.
                   decoration: InputDecoration(
                     prefixIcon: const Icon(Icons.search),
                     hintText: 'Search events...',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                 ),
               ),
@@ -388,16 +277,15 @@ If you believe this is a mistake, please contact the administrator.
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder:
-                          (_) => AddEventPage(
-                            venue: '',
-                            date: DateTime.now(),
-                            timeSlot: '',
-                            eventId: '',
-                            isUserMode: false,
-                            shift: '',
-                            selectedShifts: [],
-                          ),
+                      builder: (_) => AddEventPage(
+                        venue: '',
+                        date: DateTime.now(),
+                        timeSlot: '',
+                        eventId: '',
+                        isUserMode: false,
+                        shift: '',
+                        selectedShifts: const [],
+                      ),
                     ),
                   );
                 },
@@ -411,43 +299,30 @@ If you believe this is a mistake, please contact the administrator.
           const Divider(),
           _buildHeaderRow(),
           SizedBox(
-            height: 400,
+            height: 420,
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _eventsStream(),
               builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  debugPrint("❌ Firestore error: ${snapshot.error}");
-                  return Text('Error: ${snapshot.error}');
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+                if (snapshot.hasError) return Text('Error: ${snapshot.error}');
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
-                final docs =
-                    snapshot.data!.docs
-                        .where(
-                          (doc) =>
-                              _matchesSearch(doc.data()['title'] as String?),
-                        )
-                        .toList();
+                final docs = snapshot.data!.docs
+                    .where((doc) => _matchesSearch(doc.data()['title'] as String?))
+                    .toList();
 
                 if (docs.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(24.0),
-                    child: Text('No events found.'),
-                  );
+                  return const Center(child: Text('No events found.'));
                 }
 
                 return ListView.builder(
                   itemCount: docs.length,
-                  itemBuilder: (context, index) {
-                    final snap = docs[index];
+                  itemBuilder: (context, i) {
+                    final snap = docs[i];
                     final data = snap.data();
-                    final start = _parseDate(data['startDateTime']);
-                    final formatted =
-                        start != null
-                            ? DateFormat('yyyy-MM-dd').format(start)
-                            : 'N/A';
+                    final date = _parseDate(data['startDateTime']);
+                    final formatted = date != null
+                        ? DateFormat('yyyy-MM-dd').format(date)
+                        : 'N/A';
 
                     return _EventRow(
                       snap: snap,
@@ -455,11 +330,12 @@ If you believe this is a mistake, please contact the administrator.
                       date: formatted,
                       venue: data['venue'] ?? 'N/A',
                       organizer: data['organizerName'] ?? 'N/A',
-                      status: _normalizedStatus(data['status']),
+                      status: _normalizeStatus(data['status']),
                       organizerEmail: data['organizerEmail'] ?? '',
                       onApprove: _approveEvent,
-                      onComplete: _completeEvent,
                       onReject: _rejectEvent,
+                      onComplete: _completeEvent,
+                      onCancel: _cancelEvent,
                     );
                   },
                 );
@@ -488,6 +364,8 @@ If you believe this is a mistake, please contact the administrator.
         chip('Approved', EventStatusFilter.approved),
         chip('Completed', EventStatusFilter.completed),
         chip('Rejected', EventStatusFilter.rejected),
+        chip('Canceled', EventStatusFilter.canceled),
+        chip('Expired', EventStatusFilter.expired),
       ],
     );
   }
@@ -501,7 +379,7 @@ If you believe this is a mistake, please contact the administrator.
         Expanded(flex: 2, child: Text('Venue', style: style)),
         Expanded(flex: 2, child: Text('Organizer', style: style)),
         Expanded(flex: 1, child: Text('Status', style: style)),
-        Expanded(flex: 2, child: Text('Action', style: style)),
+        Expanded(flex: 2, child: Text('Actions', style: style)),
       ],
     );
   }
@@ -513,9 +391,10 @@ If you believe this is a mistake, please contact the administrator.
 class _EventRow extends StatelessWidget {
   final DocumentSnapshot<Map<String, dynamic>> snap;
   final String title, date, venue, organizer, status, organizerEmail;
-  final void Function(DocumentSnapshot<Map<String, dynamic>> snap) onApprove;
-  final void Function(DocumentSnapshot<Map<String, dynamic>> snap) onComplete;
-  final void Function(DocumentSnapshot<Map<String, dynamic>> snap) onReject;
+  final void Function(DocumentSnapshot<Map<String, dynamic>>) onApprove;
+  final void Function(DocumentSnapshot<Map<String, dynamic>>) onReject;
+  final void Function(DocumentSnapshot<Map<String, dynamic>>) onComplete;
+  final void Function(DocumentSnapshot<Map<String, dynamic>>) onCancel;
 
   const _EventRow({
     required this.snap,
@@ -526,8 +405,9 @@ class _EventRow extends StatelessWidget {
     required this.status,
     required this.organizerEmail,
     required this.onApprove,
-    required this.onComplete,
     required this.onReject,
+    required this.onComplete,
+    required this.onCancel,
   });
 
   Color _statusColor(String s) {
@@ -538,6 +418,8 @@ class _EventRow extends StatelessWidget {
         return Colors.blue;
       case 'rejected':
         return Colors.red;
+      case 'canceled':
+        return Colors.grey;
       case 'expired':
         return Colors.black54;
       default:
@@ -549,6 +431,9 @@ class _EventRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final pending = status.toLowerCase() == 'pending';
     final approved = status.toLowerCase() == 'approved';
+    final completed = status.toLowerCase() == 'completed';
+    final rejected = status.toLowerCase() == 'rejected';
+    final canceled = status.toLowerCase() == 'canceled';
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -573,28 +458,26 @@ class _EventRow extends StatelessWidget {
             child: PopupMenuButton<String>(
               onSelected: (val) {
                 if (val == 'approve') onApprove(snap);
-                if (val == 'complete') onComplete(snap);
                 if (val == 'reject') onReject(snap);
+                if (val == 'complete') onComplete(snap);
+                if (val == 'cancel') onCancel(snap);
               },
-              itemBuilder:
-                  (_) => [
-                    if (pending) ...[
-                      const PopupMenuItem(
-                        value: 'approve',
-                        child: Text('Approve'),
-                      ),
-                      const PopupMenuItem(
-                        value: 'reject',
-                        child: Text('Reject'),
-                      ),
-                    ],
-                    if (approved) ...[
-                      const PopupMenuItem(
-                        value: 'complete',
-                        child: Text('Complete'),
-                      ),
-                    ],
-                  ],
+              itemBuilder: (_) => [
+                if (pending) ...[
+                  const PopupMenuItem(value: 'approve', child: Text('Approve')),
+                  const PopupMenuItem(value: 'reject', child: Text('Reject')),
+                ],
+                if (approved) ...[
+                  const PopupMenuItem(value: 'complete', child: Text('Complete')),
+                  const PopupMenuItem(value: 'cancel', child: Text('Cancel (→ Pending)')),
+                ],
+                if (rejected || canceled) ...[
+                  const PopupMenuItem(value: 'cancel', child: Text('Revert to Pending')),
+                ],
+                if (completed) ...[
+                  const PopupMenuItem(value: 'cancel', child: Text('Reopen (→ Pending)')),
+                ],
+              ],
             ),
           ),
         ],

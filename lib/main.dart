@@ -8,8 +8,11 @@ import 'package:withfbase/widgets/edit_profile_page.dart';
 import 'package:withfbase/widgets/help_center_page.dart';
 import 'package:withfbase/widgets/notification_service.dart';
 import 'package:withfbase/widgets/notification_settings_page.dart';
+import 'package:withfbase/widgets/responsive_layout.dart';
 import 'package:withfbase/widgets/security_page.dart';
 import 'firebase_options.dart';
+
+// ✅ Supabase
 
 // Pages
 import 'package:withfbase/pages/loginpage.dart';
@@ -21,8 +24,6 @@ import 'package:withfbase/pages/main_page.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
-// Responsive framework
-import 'package:responsive_framework/responsive_framework.dart';
 
 // ScreenUtil
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -33,6 +34,8 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // ✅ Init Supabase
 
   // Init timezone data
   tz.initializeTimeZones();
@@ -53,53 +56,35 @@ class MyApp extends StatelessWidget {
       minTextAdapt: true,
       splitScreenMode: true,
       builder: (context, child) {
-        return MaterialApp(
-          title: 'Hallevent',
-          debugShowCheckedModeBanner: false,
-          theme: ThemeData(
-            primarySwatch: Colors.blue,
-            scaffoldBackgroundColor: Colors.grey[100],
-            fontFamily: 'Roboto',
-            visualDensity: VisualDensity.adaptivePlatformDensity,
-          ),
-          initialRoute: '/main',
-          routes: {
-            '/main': (context) => const MainPage(),
-            '/login': (context) => const LoginPage(),
-            '/logout': (context) => const LoginPage(),
-            '/signup': (context) => const SignupPage(),
-            '/home': (context) => const Homepage(),
-            '/admin': (context) => const MainAdminPage(),
-            '/profile/edit': (_) => const EditProfilePage(),
-            '/profile/security': (_) => const SecurityPage(),
-            '/profile/notifications': (_) => const NotificationSettingsPage(),
-            '/profile/history': (_) => const ActivityHistoryPage(),
-            '/settings': (_) => const AppSettingsPage(),
-            '/help': (_) => const HelpCenterPage(),
-          },
+      return MaterialApp(
+  title: 'Hallevent',
+  debugShowCheckedModeBanner: false,
+  theme: ThemeData(
+    primarySwatch: Colors.blue,
+    scaffoldBackgroundColor: Colors.grey[100],
+    fontFamily: 'Roboto',
+    visualDensity: VisualDensity.adaptivePlatformDensity,
+  ),
+  initialRoute: '/main',
+  routes: { '/main': (context) => const MainPage(), '/login': (context) => const LoginPage(), '/logout': (context) => const LoginPage(), '/signup': (context) => const SignupPage(), '/home': (context) => const Homepage(), '/admin': (context) => const MainAdminPage(), '/profile/edit': (_) => const EditProfilePage(), '/profile/security': (_) => const SecurityPage(), '/profile/notifications': (_) => const NotificationSettingsPage(), '/profile/history': (_) => const ActivityHistoryPage(), '/settings': (_) => const AppSettingsPage(), '/help': (_) => const HelpCenterPage(), },
 
-          // ✅ Responsive Framework
-          builder:
-              (context, widget) => ResponsiveBreakpoints.builder(
-                child: widget!,
-                breakpoints: [
-                  const Breakpoint(start: 0, end: 450, name: MOBILE),
-                  const Breakpoint(start: 451, end: 800, name: TABLET),
-                  const Breakpoint(start: 801, end: 1200, name: DESKTOP),
-                  const Breakpoint(
-                    start: 1201,
-                    end: double.infinity,
-                    name: '4K',
-                  ),
-                ],
-              ),
-
-          onUnknownRoute:
-              (settings) =>
-                  MaterialPageRoute(builder: (context) => const UnknownPage()),
-
-          home: child, // ScreenUtilInit child
+  // ✅ Halkan ResponsiveBreakpoints waa laga saaray
+  builder: (context, widget) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SizedBox.expand( // buuxi width + height screen dhan
+          child: widget,
         );
+      },
+    );
+  },
+
+  onUnknownRoute: (settings) =>
+      MaterialPageRoute(builder: (context) => const UnknownPage()),
+
+  home: const ResponsiveLayout(), // ✅ default home = responsive
+);
+
       },
       child: const MainPage(),
     );

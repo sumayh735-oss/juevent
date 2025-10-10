@@ -57,7 +57,12 @@ class EventModel {
       organizerEmail: data['organizerEmail'] ?? '',
       businessDocumentUrl: data['businessDocumentUrl'] ?? '',
       reminderSent: data['reminderSent'] ?? false,
-      seats: (data['seats'] ?? 0) is int ? data['seats'] : 0,
+      seats: data['seats'] == null
+    ? 0
+    : (data['seats'] is int
+        ? data['seats'] as int
+        : (data['seats'] as num).toInt()),
+
       startDateTime:
           data['startDateTime'] != null
               ? (data['startDateTime'] as Timestamp).toDate()
