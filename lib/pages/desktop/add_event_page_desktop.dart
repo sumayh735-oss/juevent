@@ -45,6 +45,8 @@ class AddEventPageDesktop extends StatefulWidget {
 }
 
 class _AddEventPageDesktop extends State<AddEventPageDesktop> {
+  String? selectedVenue = 'Main Hall';
+
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
@@ -57,6 +59,8 @@ class _AddEventPageDesktop extends State<AddEventPageDesktop> {
   final TextEditingController _organizerEmailController =
       TextEditingController();
   final TextEditingController _seatsController = TextEditingController();
+  final TextEditingController _companyLocationController = TextEditingController();
+
   final TextEditingController _companyNameController = TextEditingController();
   final TextEditingController _organizerPhoneController =
       TextEditingController();
@@ -252,6 +256,7 @@ void _initializeDatesAndTimes() {
         .showSnackBar(SnackBar(content: Text('Error picking file: $e')));
   }
 }
+
 Future<String?> _uploadBusinessDocument() async {
   if (_businessDocument == null || !_businessDocument!.existsSync()) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -375,109 +380,112 @@ Future<void> _pickAndUploadImage() async {
             .get();
     return result.docs.isNotEmpty;
   }
+
 Future<void> _createEvent() async {
   try {
-    print("🔹 Starting final event creation");
-
-    // 🔹 Step 1: Normalize and clean text fields
-    print("📅 Raw Start: ${_startDateController.text} ${_startTimeController.text}");
-    print("📅 Raw End: ${_endDateController.text} ${_endTimeController.text}");
-
-    String cleanStart = _startTimeController.text
-        .replaceAll(RegExp(r'[\u202F\u00A0\u200B]'), ' ')
-        .trim();
-    String cleanEnd = _endTimeController.text
-        .replaceAll(RegExp(r'[\u202F\u00A0\u200B]'), ' ')
-        .trim();
-
-    print('🕓 Clean StartTime: "$cleanStart"');
-    print('🕓 Clean EndTime: "$cleanEnd"');
-
-    // 🔹 Step 2: Parse dates and times safely
-    final DateTime parsedStartDate =
-        DateFormat('yyyy-MM-dd').parse(_startDateController.text);
-    final DateTime parsedEndDate =
-        DateFormat('yyyy-MM-dd').parse(_endDateController.text);
-
-    final DateTime parsedStartTime = DateFormat('h:mm a').parse(cleanStart);
-    final DateTime parsedEndTime = DateFormat('h:mm a').parse(cleanEnd);
-
-    // 🔹 Step 3: Combine date + time
-    final DateTime startDateTime = DateTime(
-      parsedStartDate.year,
-      parsedStartDate.month,
-      parsedStartDate.day,
-      parsedStartTime.hour,
-      parsedStartTime.minute,
-    );
-
-    final DateTime endDateTime = DateTime(
-      parsedEndDate.year,
-      parsedEndDate.month,
-      parsedEndDate.day,
-      parsedEndTime.hour,
-      parsedEndTime.minute,
-    );
-
-    print('✅ Final Start Timestamp: $startDateTime');
-    print('✅ Final End Timestamp: $endDateTime');
-
-    // 🔹 Step 4: Prepare metadata
-    final customId = FirebaseFirestore.instance.collection('events').doc().id;
-    final createdDateFormatted =
-        DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
-    final user = FirebaseAuth.instance.currentUser!;
-
-    // Example default shifts if you haven’t dynamically added them
-    final List<Map<String, dynamic>> shifts = [
-      {'name': 'Morning Shift', 'status': 'Available'},
-      {'name': 'Evening Shift', 'status': 'Available'},
-    ];
-
-    // 🔹 Step 5: Build Firestore event data
-    final Map<String, dynamic> eventData = {
-      'customId': customId,
-      'title': _titleController.text.trim(),
-      'venue': _selectedVenue ?? widget.venue,
-      'description': _descriptionController.text.trim(),
-      'startDateTime': Timestamp.fromDate(startDateTime),
-      'endDateTime': Timestamp.fromDate(endDateTime),
-      'createdAt': FieldValue.serverTimestamp(),
-      'createdDateFormatted': createdDateFormatted,
-      'status': 'pending',
-      'selectedShifts': shifts,
-      'organizerName': _organizerNameController.text.trim(),
-      'organizerEmail': _organizerEmailController.text.trim(),
-      'organizerPhone': _organizerPhoneController.text.trim(),
-      'companyName': _companyNameController.text.trim(),
-      'category': _selectedCategory,
-      'createdBy': user.uid,
-      'seats': int.tryParse(_seatsController.text.trim()) ?? 0,
-      'imageUrl': _imageUrl ?? '',
-      'businessDocUrl': _businessDocUrl ?? '',
-    };
-
-    // 🔹 Step 6: Save to Firestore
-    await FirebaseFirestore.instance
-        .collection('events')
-        .doc(customId)
-        .set(eventData);
-
-    print("🎉 Event created successfully!");
-    if (context.mounted) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✅ Event created successfully!')),
+        const SnackBar(content: Text('You must be logged in to create an event.')),
       );
+      return;
     }
 
+    // ✅ Diyaari taariikhaha iyo shifts
+    final validDates = widget.validDates.isNotEmpty ? widget.validDates : [widget.date];
+
+    for (final date in validDates) {
+      final shifts = widget.selectedShiftsMap[date] ?? widget.selectedShifts;
+      if (shifts.isEmpty) continue;
+
+      final String formattedDate =
+          "${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year}";
+      final String venueName = (_selectedVenue ?? widget.venue).replaceAll(' ', '');
+      final int seats = int.tryParse(_seatsController.text.trim()) ?? 0;
+
+      // ✅ Loop through every shift si mid walba uu noqdo event gooni ah
+      for (final shift in shifts) {
+        final bool isMorning = shift.contains("08:00");
+        final bool isAfternoon = shift.contains("02:00");
+        final String shiftLabel = isMorning ? "AM" : isAfternoon ? "PM" : "SHIFT";
+
+        // ✅ Custom ID unique per shift + venue + date
+        final String customId = "event_${formattedDate}_${venueName}_$shiftLabel";
+
+        final eventData = {
+          'customId': customId,
+          'title': _titleController.text.trim(),
+          'venue': _selectedVenue ?? widget.venue,
+          'description': _descriptionController.text.trim(),
+          'date': Timestamp.fromDate(date),
+          'shift': shiftLabel,
+          'selectedShifts': [shift],
+          'startDateTime': Timestamp.fromDate(date),
+          'endDateTime': Timestamp.fromDate(date.add(const Duration(hours: 4))),
+          'createdAt': FieldValue.serverTimestamp(),
+          'status': 'pending',
+          'organizerName': _organizerNameController.text.trim(),
+          'organizerEmail': _organizerEmailController.text.trim(),
+          'organizerPhone': _organizerPhoneController.text.trim(),
+          'companyName': _companyNameController.text.trim(),
+          'companyLocation': _companyLocationController.text.trim(),
+          'category': _selectedCategory,
+          'createdBy': user.uid,
+          'seats': seats,
+          if (_imageUrl != null) 'imageUrl': _imageUrl,
+          if (_businessDocUrl != null) 'businessDocUrl': _businessDocUrl,
+        };
+
+        // ✅ Save event (unique per shift)
+        await FirebaseFirestore.instance.collection('events').doc(customId).set(eventData);
+        debugPrint("✅ Event saved: $customId");
+
+        // ✅ Booking key unique per date + venue
+        final String bookingKey = "${date.year}-${date.month}-${date.day}_${venueName}";
+        final docRef = FirebaseFirestore.instance.collection('booking').doc(bookingKey);
+
+        final bookingDoc = await docRef.get();
+
+        bool morning = bookingDoc.data()?['morning'] ?? false;
+        bool afternoon = bookingDoc.data()?['afternoon'] ?? false;
+
+        if (isMorning) morning = true;
+        if (isAfternoon) afternoon = true;
+
+        await docRef.set({
+          'date': Timestamp.fromDate(date),
+          'venue': widget.venue,
+          'morning': morning,
+          'afternoon': afternoon,
+        }, SetOptions(merge: true));
+
+        debugPrint("🗓️ Booking updated: $bookingKey (AM=$morning, PM=$afternoon)");
+      }
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('✅ Event(s) & Booking updated successfully!')),
+    );
+
+    // ✅ Nadiifi form
+    setState(() {
+      _titleController.clear();
+      _descriptionController.clear();
+      _companyNameController.clear();
+      _companyLocationController.clear();
+      _organizerNameController.clear();
+      _organizerEmailController.clear();
+      _organizerPhoneController.clear();
+      _seatsController.clear();
+      _imageUrl = null;
+      _businessDocUrl = null;
+    });
   } catch (e, stack) {
-    print('❌ Error creating event: $e');
-    print('🧱 Stacktrace: $stack');
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
-    }
+    debugPrint('❌ Error creating event: $e');
+    debugPrint('🧱 Stack: $stack');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error creating event: $e')),
+    );
   }
 }
 
@@ -600,6 +608,11 @@ String _monthName(int month) {
                     (v) => v == null || v.isEmpty ? 'Enter company name' : null,
               ),
               const SizedBox(height: 16),
+              TextFormField(
+  controller: _companyLocationController,
+  decoration: const InputDecoration(labelText: 'Company Location'),
+  validator: (v) => v == null || v.isEmpty ? 'Enter company location' : null,
+),
               const SizedBox(height: 16),
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
@@ -890,4 +903,5 @@ String _monthName(int month) {
     setState(() => _isDocUploading = false);
   }
 }
+
 }

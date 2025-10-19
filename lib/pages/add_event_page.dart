@@ -60,6 +60,7 @@ class _AddEventPageState extends State<AddEventPage> {
   final TextEditingController _seatsController = TextEditingController();
   final TextEditingController _companyNameController = TextEditingController();
   final TextEditingController _companyLocationController = TextEditingController();
+  
 
   final TextEditingController _organizerPhoneController =
       TextEditingController();
@@ -194,26 +195,51 @@ void _checkAndInitUser() async {
     return DateFormat.jm().format(dt);
   }
 
-  Future<void> _pickBusinessDocument() async {
+ Future<void> _pickBusinessDocument() async {
+  try {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      withData: true, // muhiim u ah Web
     );
-    if (result != null && result.files.single.path != null) {
-      final filePath = result.files.single.path!;
-      final pickedFile = File(filePath);
-      if (pickedFile.existsSync()) {
-        setState(() {
-          _businessDocument = pickedFile;
-          _businessDocName = result.files.single.name;
-        });
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('File not found on device.')),
-        );
-      }
+
+    if (result == null || result.files.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No document selected.')),
+      );
+      return;
     }
+
+    final file = result.files.first;
+    setState(() => _businessDocName = file.name);
+
+    // 🌐 Web upload
+    if (kIsWeb) {
+      final bytes = file.bytes;
+      if (bytes != null) {
+        await _uploadBusinessDocumentWeb(bytes, file.name);
+      }
+      return;
+    }
+
+    // 🖥️ Desktop / 📱 Mobile upload
+    final path = file.path;
+    if (path != null) {
+      _businessDocument = File(path);
+      await _uploadBusinessDocument();
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('File selected: ${file.name}')),
+    );
+  } catch (e) {
+    debugPrint("❌ File pick error: $e");
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Error picking file: $e')));
   }
+}
+
+
 
   Future<String?> _uploadBusinessDocument() async {
     if (_businessDocument == null || !_businessDocument!.existsSync()) {
@@ -324,90 +350,98 @@ Future<void> _createEvent() async {
       return;
     }
 
-    // Hubi user doc
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
+    // ✅ Diyaari taariikhaha iyo shifts
+    final validDates = widget.validDates.isNotEmpty ? widget.validDates : [widget.date];
 
-    if (!userDoc.exists) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User profile not found.')),
-      );
-      return;
-    }
-
-    final data = userDoc.data()!;
-    final isBlacklisted = data['isBlacklisted'] ?? false;
-    if (isBlacklisted == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('🚫 Your account is blocked. You cannot create events.')),
-      );
-      return;
-    }
-
-    // --------- Halkan abuur event haddii aan la block gareynin ----------
-    final datesToSave =
-        widget.validDates.isNotEmpty ? widget.validDates : [widget.date];
-
-    for (var date in datesToSave) {
+    for (final date in validDates) {
       final shifts = widget.selectedShiftsMap[date] ?? widget.selectedShifts;
       if (shifts.isEmpty) continue;
 
-      // ✅ Samee ID gaar ah oo ku saleysan waqtiga hadda
-      final now = DateTime.now();
-      final String customId =
-          "event_${now.toIso8601String().replaceAll(':', '-')}";
+      final String formattedDate =
+          "${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year}";
+      final String venueName = (_selectedVenue ?? widget.venue).replaceAll(' ', '');
+      final int seats = int.tryParse(_seatsController.text.trim()) ?? 0;
 
-      // ✅ Samee date format la akhriyi karo
-      final String createdDateFormatted =
-          "${now.day.toString().padLeft(2, '0')} ${_monthName(now.month)} ${now.year}";
+      // ✅ Loop through every shift si mid walba uu noqdo event gooni ah
+      for (final shift in shifts) {
+        final bool isMorning = shift.contains("08:00");
+        final bool isAfternoon = shift.contains("02:00");
+        final String shiftLabel = isMorning ? "AM" : isAfternoon ? "PM" : "SHIFT";
 
-      // ✅ diyaari event data
-      final Map<String, dynamic> eventData = {
-        'customId': customId,
-        'title': _titleController.text.trim(),
-        'venue': widget.venue,
-        'description': _descriptionController.text.trim(),
-        'startDateTime': Timestamp.fromDate(date),
-        'endDateTime': Timestamp.fromDate(date.add(const Duration(hours: 4))),
-        'createdAt': FieldValue.serverTimestamp(),
-        'createdDateFormatted': createdDateFormatted, // ✅ Human readable date
-        'status': 'pending',
-        'selectedShifts': shifts.toList(),
-        'organizerName': _organizerNameController.text.trim(),
-        'organizerEmail': _organizerEmailController.text.trim(),
-        'organizerPhone': _organizerPhoneController.text.trim(),
-        'companyName': _companyNameController.text.trim(),
-        'companyLocation': _companyLocationController.text.trim(),
-        'category': _selectedCategory,
-        'createdBy': user.uid,
-      };
+        // ✅ Custom ID unique per shift + venue + date
+        final String customId = "event_${formattedDate}_${venueName}_$shiftLabel";
 
-      // ✅ Hubi URLs
-      if (_imageUrl != null && _imageUrl!.isNotEmpty) {
-        eventData['imageUrl'] = _imageUrl;
+        final eventData = {
+          'customId': customId,
+          'title': _titleController.text.trim(),
+          'venue': _selectedVenue ?? widget.venue,
+          'description': _descriptionController.text.trim(),
+          'date': Timestamp.fromDate(date),
+          'shift': shiftLabel,
+          'selectedShifts': [shift],
+          'startDateTime': Timestamp.fromDate(date),
+          'endDateTime': Timestamp.fromDate(date.add(const Duration(hours: 4))),
+          'createdAt': FieldValue.serverTimestamp(),
+          'status': 'pending',
+          'organizerName': _organizerNameController.text.trim(),
+          'organizerEmail': _organizerEmailController.text.trim(),
+          'organizerPhone': _organizerPhoneController.text.trim(),
+          'companyName': _companyNameController.text.trim(),
+          'companyLocation': _companyLocationController.text.trim(),
+          'category': _selectedCategory,
+          'createdBy': user.uid,
+          'seats': seats,
+          if (_imageUrl != null) 'imageUrl': _imageUrl,
+          if (_businessDocUrl != null) 'businessDocUrl': _businessDocUrl,
+        };
+
+        // ✅ Save event (unique per shift)
+        await FirebaseFirestore.instance.collection('events').doc(customId).set(eventData);
+        debugPrint("✅ Event saved: $customId");
+
+        // ✅ Booking key unique per date + venue
+        final String bookingKey = "${date.year}-${date.month}-${date.day}_${venueName}";
+        final docRef = FirebaseFirestore.instance.collection('booking').doc(bookingKey);
+
+        final bookingDoc = await docRef.get();
+
+        bool morning = bookingDoc.data()?['morning'] ?? false;
+        bool afternoon = bookingDoc.data()?['afternoon'] ?? false;
+
+        if (isMorning) morning = true;
+        if (isAfternoon) afternoon = true;
+
+        await docRef.set({
+          'date': Timestamp.fromDate(date),
+          'venue': widget.venue,
+          'morning': morning,
+          'afternoon': afternoon,
+        }, SetOptions(merge: true));
+
+        debugPrint("🗓️ Booking updated: $bookingKey (AM=$morning, PM=$afternoon)");
       }
-      if (_businessDocUrl != null && _businessDocUrl!.isNotEmpty) {
-        eventData['businessDocUrl'] = _businessDocUrl;
-      }
-
-      debugPrint('📦 Event data prepared: $eventData');
-
-      // ✅ Ku kaydi Firestore adigoo isticmaalaya customId
-      await FirebaseFirestore.instance
-          .collection('events')
-          .doc(customId)
-          .set(eventData);
-
-      debugPrint('✅ Event saved with ID: $customId');
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('✅ Event(s) created successfully!')),
+      const SnackBar(content: Text('✅ Event(s) & Booking updated successfully!')),
     );
-  } catch (e) {
+
+    // ✅ Nadiifi form
+    setState(() {
+      _titleController.clear();
+      _descriptionController.clear();
+      _companyNameController.clear();
+      _companyLocationController.clear();
+      _organizerNameController.clear();
+      _organizerEmailController.clear();
+      _organizerPhoneController.clear();
+      _seatsController.clear();
+      _imageUrl = null;
+      _businessDocUrl = null;
+    });
+  } catch (e, stack) {
     debugPrint('❌ Error creating event: $e');
+    debugPrint('🧱 Stack: $stack');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Error creating event: $e')),
     );
@@ -459,6 +493,7 @@ String _monthName(int month) {
       });
     }
   }
+
 
   Future<void> _pickEndDate() async {
     final current = DateFormat('yyyy-MM-dd').parse(_endDateController.text);
@@ -789,6 +824,48 @@ const SizedBox(height: 16),
       ),
     );
   }
+
+    Future<String?> _uploadBusinessDocumentWeb(Uint8List bytes, String fileName) async {
+  setState(() => _isDocUploading = true);
+
+  try {
+    final uri = Uri.parse('https://api.cloudinary.com/v1_1/dphogtuy2/raw/upload');
+    final request = http.MultipartRequest('POST', uri)
+      ..fields['upload_preset'] = 'ml_default'
+      ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
+
+    final response = await request.send();
+    final responseBody = await response.stream.bytesToString();
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(responseBody);
+      final uploadedUrl = data['secure_url'];
+
+      // ✅ FIX: Save uploaded URL to _businessDocUrl
+      setState(() => _businessDocUrl = uploadedUrl);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('✅ Document uploaded successfully (Web)!')),
+      );
+
+      return uploadedUrl;
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ Upload failed: ${response.reasonPhrase}')),
+      );
+      return null;
+    }
+  } catch (e) {
+    debugPrint('⚠️ Web Upload error: $e');
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Upload error: $e')));
+    return null;
+  } finally {
+    setState(() => _isDocUploading = false);
+  }
+}
+
+
 }
 
 

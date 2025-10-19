@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:withfbase/pages/main_admin_page.dart';
+import 'package:withfbase/pages/mycreated_events_page.dart';
 import 'package:withfbase/widgets/activity_history_page.dart';
 import 'package:withfbase/widgets/app_settings_page.dart';
 import 'package:withfbase/widgets/edit_profile_page.dart';
@@ -66,7 +67,13 @@ class MyApp extends StatelessWidget {
     visualDensity: VisualDensity.adaptivePlatformDensity,
   ),
   initialRoute: '/main',
-  routes: { '/main': (context) => const MainPage(), '/login': (context) => const LoginPage(), '/logout': (context) => const LoginPage(), '/signup': (context) => const SignupPage(), '/home': (context) => const Homepage(), '/admin': (context) => const MainAdminPage(), '/profile/edit': (_) => const EditProfilePage(), '/profile/security': (_) => const SecurityPage(), '/profile/notifications': (_) => const NotificationSettingsPage(), '/profile/history': (_) => const ActivityHistoryPage(), '/settings': (_) => const AppSettingsPage(), '/help': (_) => const HelpCenterPage(), },
+  routes: { '/main': (context) => const MainPage(), '/login': (context) => 
+  const LoginPage(), '/logout': (context) => const LoginPage(), '/signup': (context) => 
+  const SignupPage(), '/home': (context) => const Homepage(), '/admin': (context) => const MainAdminPage(), '/profile/edit': (_) => 
+  const EditProfilePage(),'/profile/my_events': (context) => const MycreatedEventsPage(),
+'/profile/security': (_) => const SecurityPage(), '/profile/notifications': (_) => 
+const NotificationSettingsPage(), '/profile/history': (_) => const ActivityHistoryPage(), '/settings': (_) => 
+const AppSettingsPage(), '/help': (_) => const HelpCenterPage(), },
 
   // ✅ Halkan ResponsiveBreakpoints waa laga saaray
   builder: (context, widget) {

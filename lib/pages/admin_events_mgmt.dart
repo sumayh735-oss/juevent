@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// events_management_with_status.dart (FINAL with Cancel -> Pending)
+// admin_events_mgmt_mobile.dart  ✅ FINAL MOBILE VERSION (Reason + Cancel Info)
 // -----------------------------------------------------------------------------
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,8 +8,11 @@ import 'package:intl/intl.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 import 'package:withfbase/pages/add_event_page.dart';
-import 'package:withfbase/widgets/home_header.dart'; 
+import 'package:withfbase/widgets/home_header.dart';
 
+// -----------------------------------------------------------------------------
+// EMAIL FUNCTION
+// -----------------------------------------------------------------------------
 Future<void> sendEmail({
   required String recipientEmail,
   required String subject,
@@ -17,7 +20,6 @@ Future<void> sendEmail({
 }) async {
   const String username = 'sumayh735@gmail.com';
   const String password = 'kuqo fmer odgv awqe';
-
   final smtpServer = gmail(username, password);
 
   final message = Message()
@@ -28,28 +30,22 @@ Future<void> sendEmail({
 
   try {
     await send(message, smtpServer);
-    debugPrint('✅ SMTP: Email sent to $recipientEmail');
+    debugPrint('✅ Email sent to $recipientEmail');
   } catch (e) {
     debugPrint('❌ SMTP error: $e');
   }
 }
 
+// -----------------------------------------------------------------------------
+// MAIN SCREEN
+// -----------------------------------------------------------------------------
 class AdminEventsMgmt extends StatefulWidget {
   const AdminEventsMgmt({super.key});
-
   @override
   State<AdminEventsMgmt> createState() => _AdminEventsMgmtState();
 }
 
-enum EventStatusFilter {
-  all,
-  pending,
-  approved,
-  completed,
-  rejected,
-  canceled,
-  deleted,
-}
+enum EventStatusFilter { all, pending, approved, completed, rejected, canceled, deleted }
 
 class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
   final TextEditingController _searchController = TextEditingController();
@@ -59,9 +55,7 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(() {
-      setState(() => _searchTerm = _searchController.text.toLowerCase());
-    });
+    _searchController.addListener(() => setState(() => _searchTerm = _searchController.text.toLowerCase()));
     expireApprovedEvents();
     checkAndSendReminders();
   }
@@ -72,23 +66,18 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
     super.dispose();
   }
 
+  // Normalize statuses
   String _normalizedStatus(String? raw) {
     if (raw == null) return 'Pending';
     switch (raw.toLowerCase()) {
-      case 'approved':
-        return 'Approved';
-      case 'completed':
-        return 'Completed';
-      case 'rejected':
-        return 'Rejected';
-      case 'expired':
-        return 'Expired';
+      case 'approved': return 'Approved';
+      case 'completed': return 'Completed';
+      case 'rejected': return 'Rejected';
+      case 'expired': return 'Expired';
       case 'canceled':
-        return 'Canceled';
-      case 'deleted':
-        return 'Deleted';
-      default:
-        return 'Pending';
+      case 'cancelled': return 'Canceled';
+      case 'deleted': return 'Deleted';
+      default: return 'Pending';
     }
   }
 
@@ -108,35 +97,17 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
     final coll = FirebaseFirestore.instance.collection('events');
     switch (_filter) {
       case EventStatusFilter.pending:
-        return coll
-            .where('status', whereIn: ['Pending', 'pending'])
-            .orderBy('createdAt', descending: true)
-            .snapshots();
+        return coll.where('status', whereIn: ['Pending', 'pending']).orderBy('createdAt', descending: true).snapshots();
       case EventStatusFilter.approved:
-        return coll
-            .where('status', whereIn: ['Approved', 'approved'])
-            .orderBy('startDateTime')
-            .snapshots();
+        return coll.where('status', whereIn: ['Approved', 'approved']).orderBy('startDateTime').snapshots();
       case EventStatusFilter.completed:
-        return coll
-            .where('status', whereIn: ['Completed', 'completed'])
-            .orderBy('startDateTime')
-            .snapshots();
+        return coll.where('status', whereIn: ['Completed', 'completed']).orderBy('startDateTime').snapshots();
       case EventStatusFilter.rejected:
-        return coll
-            .where('status', whereIn: ['Rejected', 'rejected'])
-            .orderBy('createdAt', descending: true)
-            .snapshots();
+        return coll.where('status', whereIn: ['Rejected', 'rejected']).orderBy('createdAt', descending: true).snapshots();
       case EventStatusFilter.canceled:
-        return coll
-            .where('status', whereIn: ['Canceled', 'canceled'])
-            .orderBy('createdAt', descending: true)
-            .snapshots();
+        return coll.where('status', whereIn: ['Canceled', 'canceled', 'cancelled']).orderBy('createdAt', descending: true).snapshots();
       case EventStatusFilter.deleted:
-        return coll
-            .where('status', whereIn: ['Deleted', 'deleted'])
-            .orderBy('createdAt', descending: true)
-            .snapshots();
+        return coll.where('status', whereIn: ['Deleted', 'deleted']).orderBy('createdAt', descending: true).snapshots();
       default:
         return coll.orderBy('startDateTime').snapshots();
     }
@@ -145,17 +116,14 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
   // ---------------------------------------------------------------------------
   // ACTION METHODS
   // ---------------------------------------------------------------------------
-
   Future<void> _approveEvent(DocumentSnapshot<Map<String, dynamic>> snap) async {
     final data = snap.data();
     if (data == null) return;
-
     await snap.reference.update({
       'status': 'Approved',
       'approvedAt': FieldValue.serverTimestamp(),
       'approvedBy': FirebaseAuth.instance.currentUser?.uid,
     });
-
     final email = (data['organizerEmail'] ?? '') as String;
     if (email.isNotEmpty) {
       await sendEmail(
@@ -164,22 +132,17 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
         body: 'Dear organizer,\n\nYour event "${data['title']}" has been approved.',
       );
     }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event approved')));
-    }
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event approved')));
   }
 
   Future<void> _completeEvent(DocumentSnapshot<Map<String, dynamic>> snap) async {
     final data = snap.data();
     if (data == null) return;
-
     await snap.reference.update({
       'status': 'Completed',
       'completedAt': FieldValue.serverTimestamp(),
       'completedBy': FirebaseAuth.instance.currentUser?.uid,
     });
-
     final email = (data['organizerEmail'] ?? '') as String;
     if (email.isNotEmpty) {
       await sendEmail(
@@ -188,12 +151,7 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
         body: 'Dear organizer,\n\nYour event "${data['title']}" has been marked as Completed.',
       );
     }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Event marked as Completed')),
-      );
-    }
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event completed')));
   }
 
   Future<void> _rejectEvent(DocumentSnapshot<Map<String, dynamic>> snap) async {
@@ -202,127 +160,56 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Reject Reason'),
-        content: TextField(
-          controller: reasonCtrl,
-          decoration: const InputDecoration(hintText: 'Enter reason...'),
-        ),
+        content: TextField(controller: reasonCtrl, decoration: const InputDecoration(hintText: 'Enter reason...')),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, null),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, reasonCtrl.text.trim()),
-            child: const Text('Reject'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, reasonCtrl.text.trim()), child: const Text('Reject')),
         ],
       ),
     );
     if (reason == null || reason.isEmpty) return;
-
     final data = snap.data();
     if (data == null) return;
-
-    await snap.reference.update({
-      'status': 'Rejected',
-      'rejectedAt': FieldValue.serverTimestamp(),
-      'rejectedReason': reason,
-    });
-
-    final email = (data['organizerEmail'] ?? '') as String;
-    if (email.isNotEmpty) {
-      await sendEmail(
-        recipientEmail: email,
-        subject: 'Event Rejected',
-        body: 'Dear organizer,\n\nYour event "${data['title']}" was rejected.\nReason: $reason',
-      );
-    }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event rejected')));
-    }
+    await snap.reference.update({'status': 'Rejected', 'rejectedReason': reason, 'rejectedAt': FieldValue.serverTimestamp()});
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event rejected')));
   }
 
-  // ---------------------------------------------------------------------------
-  // CANCEL -> PENDING
-  // ---------------------------------------------------------------------------
-  Future<void> _cancelEvent(DocumentSnapshot<Map<String, dynamic>> snap) async {
-    final data = snap.data();
-    if (data == null) return;
-
+  Future<void> _revertToPending(DocumentSnapshot<Map<String, dynamic>> snap) async {
     await snap.reference.update({'status': 'Pending'});
-
-    // Force UI refresh
-    setState(() {});
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Event status reverted to Pending')),
-      );
-    }
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event reverted to Pending')));
   }
 
   Future<void> _deleteEvent(DocumentSnapshot<Map<String, dynamic>> snap) async {
-    final data = snap.data();
-    if (data == null) return;
-
     await snap.reference.update({'status': 'Deleted'});
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Event deleted')),
-      );
-    }
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event deleted')));
   }
 
   // ---------------------------------------------------------------------------
-  // EXPIRY + REMINDERS (kept as before)
+  // BACKGROUND TASKS
   // ---------------------------------------------------------------------------
   Future<void> expireApprovedEvents() async {
     final now = DateTime.now();
-    try {
-      final querySnapshot = await FirebaseFirestore.instance
-          .collection('events')
-          .where('status', isEqualTo: 'Approved')
-          .get();
-
-      for (final doc in querySnapshot.docs) {
-        final data = doc.data();
-        final endDateTime = (data['endDateTime'] as Timestamp?)?.toDate();
-        if (endDateTime == null) continue;
-
-        if (endDateTime.isBefore(now)) {
-          await doc.reference.update({'status': 'Expired'});
-          debugPrint('⚠️ Event expired: ${data['title'] ?? doc.id}');
-        }
-      }
-    } catch (e) {
-      debugPrint('❌ Error expiring events: $e');
+    final qs = await FirebaseFirestore.instance.collection('events').where('status', isEqualTo: 'Approved').get();
+    for (final doc in qs.docs) {
+      final data = doc.data();
+      final end = (data['endDateTime'] as Timestamp?)?.toDate();
+      if (end != null && end.isBefore(now)) await doc.reference.update({'status': 'Expired'});
     }
   }
 
   Future<void> checkAndSendReminders() async {
-    final querySnapshot = await FirebaseFirestore.instance
-        .collection('events')
-        .where('status', isEqualTo: 'Approved')
-        .get();
-
-    for (final doc in querySnapshot.docs) {
+    final qs = await FirebaseFirestore.instance.collection('events').where('status', isEqualTo: 'Approved').get();
+    for (final doc in qs.docs) {
       final data = doc.data();
-      DateTime? startDate;
+      DateTime? start;
       final rawStart = data['startDateTime'];
-
-      if (rawStart is Timestamp) {
-        startDate = rawStart.toDate();
-      } else if (rawStart is String) {
-        startDate = DateTime.tryParse(rawStart);
-      }
-
-      if (startDate != null && (data['reminderSent'] != true)) {
+      if (rawStart is Timestamp) start = rawStart.toDate();
+      if (rawStart is String) start = DateTime.tryParse(rawStart);
+      if (start != null && (data['reminderSent'] != true)) {
         await sendEmail(
           recipientEmail: data['organizerEmail'] ?? '',
           subject: 'Event Reminder',
-          body: 'Reminder: Your event "${data['title']}" is starting soon (${startDate.toLocal()}).',
+          body: 'Reminder: Your event "${data['title']}" is starting soon (${start.toLocal()}).',
         );
         await doc.reference.update({'reminderSent': true});
       }
@@ -332,18 +219,11 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
   // ---------------------------------------------------------------------------
   // UI BUILD
   // ---------------------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
+    final showReason = _filter == EventStatusFilter.rejected || _filter == EventStatusFilter.canceled;
+
     return Scaffold(
-      endDrawer: Drawer(
-        child: ListView(
-          children: const [
-            DrawerHeader(child: Text("Menu")),
-            ListTile(leading: Icon(Icons.home), title: Text("Home")),
-          ],
-        ),
-      ),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(120),
         child: Builder(
@@ -354,9 +234,8 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
         ),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
@@ -366,14 +245,17 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search),
                       hintText: 'Search events...',
+                      filled: true,
+                      fillColor: Colors.white,
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
+                const SizedBox(width: 10),
+                FilledButton.icon(
                   onPressed: () {
                     Navigator.push(
                       context,
@@ -391,53 +273,121 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
                     );
                   },
                   icon: const Icon(Icons.add),
-                  label: const Text('New Event'),
+                  label: const Text('New'),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             _buildFilterChips(),
             const Divider(),
-            _buildHeaderRow(),
             Expanded(
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: _eventsStream(),
                 builder: (context, snapshot) {
-                  if (snapshot.hasError) return Text('Error: ${snapshot.error}');
+                  if (snapshot.hasError) return Center(child: Text('Error: ${snapshot.error}'));
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
-                  final docs = snapshot.data!.docs
-                      .where((doc) => _matchesSearch(doc.data()['title'] as String?))
-                      .toList();
-
-                  if (docs.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(24.0),
-                      child: Text('No events found.'),
-                    );
-                  }
+                  final docs = snapshot.data!.docs.where((d) => _matchesSearch(d.data()['title'] as String?)).toList();
+                  if (docs.isEmpty) return const Center(child: Text('No events found'));
 
                   return ListView.builder(
                     itemCount: docs.length,
-                    itemBuilder: (context, index) {
-                      final snap = docs[index];
+                    itemBuilder: (context, i) {
+                      final snap = docs[i];
                       final data = snap.data();
                       final start = _parseDate(data['startDateTime']);
-                      final formatted = start != null ? DateFormat('yyyy-MM-dd').format(start) : 'N/A';
+                      final formatted = start != null ? DateFormat('MMM d, yyyy').format(start) : 'N/A';
+                      final status = _normalizedStatus(data['status']);
+                      final reason = data['rejectedReason'] ?? data['cancelledReason'] ?? '-';
+                      final canceledBy = data['cancelledByName'] ?? '-';
+                      final canceledEmail = data['cancelledEmail'] ?? '-';
+                      final canceledAt = data['cancelledAt'] is Timestamp
+                          ? DateFormat('yyyy-MM-dd HH:mm').format((data['cancelledAt'] as Timestamp).toDate())
+                          : '-';
 
-                      return _EventRow(
-                        snap: snap,
-                        title: data['title'] ?? 'Untitled',
-                        date: formatted,
-                        venue: data['venue'] ?? 'N/A',
-                        organizer: data['organizerName'] ?? 'N/A',
-                        status: _normalizedStatus(data['status']),
-                        organizerEmail: data['organizerEmail'] ?? '',
-                        onApprove: _approveEvent,
-                        onComplete: _completeEvent,
-                        onReject: _rejectEvent,
-                        onCancel: _cancelEvent,
-                        onDelete: _deleteEvent,
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      data['title'] ?? 'Untitled Event',
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  Chip(
+                                    label: Text(status, style: const TextStyle(color: Colors.white)),
+                                    backgroundColor: _statusColor(status),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text('📅 Date: $formatted'),
+                              Text('🏛️ Venue: ${data['venue'] ?? 'N/A'}'),
+                              Text('👤 Organizer: ${data['organizerName'] ?? 'N/A'}'),
+                              const SizedBox(height: 6),
+                              if (showReason)
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('📝 Reason: $reason'),
+                                    if (_filter == EventStatusFilter.canceled) ...[
+                                      Text('❌ Cancelled By: $canceledBy'),
+                                      Text('📧 Email: $canceledEmail'),
+                                      Text('⏰ At: $canceledAt'),
+                                    ],
+                                  ],
+                                ),
+                              const SizedBox(height: 6),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: PopupMenuButton<String>(
+                                  onSelected: (val) {
+                                    if (val == 'approve') _approveEvent(snap);
+                                    if (val == 'complete') _completeEvent(snap);
+                                    if (val == 'reject') _rejectEvent(snap);
+                                    if (val == 'revert') _revertToPending(snap);
+                                    if (val == 'delete') _deleteEvent(snap);
+                                  },
+                                  itemBuilder: (_) {
+                                    final items = <PopupMenuEntry<String>>[];
+                                    final low = status.toLowerCase();
+                                    if (low == 'pending') {
+                                      items.addAll(const [
+                                        PopupMenuItem(value: 'approve', child: Text('Approve')),
+                                        PopupMenuItem(value: 'reject', child: Text('Reject')),
+                                        PopupMenuItem(value: 'delete', child: Text('Delete')),
+                                      ]);
+                                    } else if (low == 'approved') {
+                                      items.addAll(const [
+                                        PopupMenuItem(value: 'complete', child: Text('Complete')),
+                                        PopupMenuItem(value: 'revert', child: Text('Revert to Pending')),
+                                      ]);
+                                    } else if (low == 'completed') {
+                                      items.addAll(const [
+                                        PopupMenuItem(value: 'delete', child: Text('Delete')),
+                                      ]);
+                                    } else if (low == 'rejected' || low == 'canceled') {
+                                      items.addAll(const [
+                                        PopupMenuItem(value: 'approve', child: Text('Approve')),
+                                        PopupMenuItem(value: 'revert', child: Text('Revert to Pending')),
+                                        PopupMenuItem(value: 'delete', child: Text('Delete')),
+                                      ]);
+                                    }
+                                    return items;
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       );
                     },
                   );
@@ -450,6 +400,28 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // HELPERS
+  // ---------------------------------------------------------------------------
+  Color _statusColor(String s) {
+    switch (s.toLowerCase()) {
+      case 'approved':
+        return Colors.green;
+      case 'completed':
+        return Colors.blue;
+      case 'rejected':
+        return Colors.red;
+      case 'expired':
+        return Colors.black54;
+      case 'canceled':
+        return Colors.grey;
+      case 'deleted':
+        return Colors.brown;
+      default:
+        return Colors.orange;
+    }
+  }
+
   Widget _buildFilterChips() {
     Widget chip(String label, EventStatusFilter value) {
       return ChoiceChip(
@@ -459,127 +431,23 @@ class _AdminEventsMgmtState extends State<AdminEventsMgmt> {
       );
     }
 
-    return Wrap(
-      spacing: 8,
-      children: [
-        chip('All', EventStatusFilter.all),
-        chip('Pending', EventStatusFilter.pending),
-        chip('Approved', EventStatusFilter.approved),
-        chip('Completed', EventStatusFilter.completed),
-        chip('Rejected', EventStatusFilter.rejected),
-        chip('Canceled', EventStatusFilter.canceled),
-        chip('Deleted', EventStatusFilter.deleted),
-      ],
-    );
-  }
-
-  Widget _buildHeaderRow() {
-    const style = TextStyle(fontWeight: FontWeight.bold);
-    return const Row(
-      children: [
-        Expanded(flex: 2, child: Text('Title', style: style)),
-        Expanded(flex: 2, child: Text('Date', style: style)),
-        Expanded(flex: 2, child: Text('Venue', style: style)),
-        Expanded(flex: 2, child: Text('Organizer', style: style)),
-        Expanded(flex: 1, child: Text('Status', style: style)),
-        Expanded(flex: 2, child: Text('Action', style: style)),
-      ],
-    );
-  }
-}
-
-// -----------------------------------------------------------------------------
-// ROW WIDGET
-// -----------------------------------------------------------------------------
-class _EventRow extends StatelessWidget {
-  final DocumentSnapshot<Map<String, dynamic>> snap;
-  final String title, date, venue, organizer, status, organizerEmail;
-  final void Function(DocumentSnapshot<Map<String, dynamic>> snap) onApprove;
-  final void Function(DocumentSnapshot<Map<String, dynamic>> snap) onComplete;
-  final void Function(DocumentSnapshot<Map<String, dynamic>> snap) onReject;
-  final void Function(DocumentSnapshot<Map<String, dynamic>> snap) onCancel;
-  final void Function(DocumentSnapshot<Map<String, dynamic>> snap) onDelete;
-
-  const _EventRow({
-    required this.snap,
-    required this.title,
-    required this.date,
-    required this.venue,
-    required this.organizer,
-    required this.status,
-    required this.organizerEmail,
-    required this.onApprove,
-    required this.onComplete,
-    required this.onReject,
-    required this.onCancel,
-    required this.onDelete,
-  });
-
-  Color _statusColor(String s) {
-    switch (s.toLowerCase()) {
-      case 'approved': return Colors.green;
-      case 'completed': return Colors.blue;
-      case 'rejected': return Colors.red;
-      case 'expired': return Colors.black54;
-      case 'canceled': return Colors.grey;
-      case 'deleted': return Colors.brown;
-      default: return Colors.orange;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final pending = status.toLowerCase() == 'pending';
-    final approved = status.toLowerCase() == 'approved';
-    final complete = status.toLowerCase() == 'completed';
-    final rejected = status.toLowerCase() == 'rejected';
-    final canceled = status.toLowerCase() == 'canceled';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.grey)),
-      ),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          Expanded(flex: 2, child: Text(title)),
-          Expanded(flex: 2, child: Text(date)),
-          Expanded(flex: 2, child: Text(venue)),
-          Expanded(flex: 2, child: Text(organizer)),
-          Expanded(
-            flex: 1,
-            child: Chip(
-              label: Text(status, style: const TextStyle(color: Colors.white)),
-              backgroundColor: _statusColor(status),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: PopupMenuButton<String>(
-              onSelected: (val) {
-                if (val == 'approve') onApprove(snap);
-                if (val == 'complete') onComplete(snap);
-                if (val == 'reject') onReject(snap);
-                if (val == 'cancel') onCancel(snap);
-                if (val == 'delete') onDelete(snap);
-              },
-              itemBuilder: (_) => [
-                if (pending || canceled || rejected) ...[
-                  const PopupMenuItem(value: 'approve', child: Text('Approve')),
-                  const PopupMenuItem(value: 'reject', child: Text('Reject')),
-                  const PopupMenuItem(value: 'cancel', child: Text('Cancel')),
-                  const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                ],
-                if (approved) ...[
-                  const PopupMenuItem(value: 'complete', child: Text('Complete')),
-                  const PopupMenuItem(value: 'cancel', child: Text('Cancel')),
-                ],
-                if (complete) ...[
-                  const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                ],
-              ],
-            ),
-          ),
+          chip('All', EventStatusFilter.all),
+          const SizedBox(width: 6),
+          chip('Pending', EventStatusFilter.pending),
+          const SizedBox(width: 6),
+          chip('Approved', EventStatusFilter.approved),
+          const SizedBox(width: 6),
+          chip('Completed', EventStatusFilter.completed),
+          const SizedBox(width: 6),
+          chip('Rejected', EventStatusFilter.rejected),
+          const SizedBox(width: 6),
+          chip('Canceled', EventStatusFilter.canceled),
+          const SizedBox(width: 6),
+          chip('Deleted', EventStatusFilter.deleted),
         ],
       ),
     );

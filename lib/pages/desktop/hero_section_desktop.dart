@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:withfbase/pages/admin_venues_mgmt_page.dart';
-import 'package:withfbase/pages/desktop/admin_events_mgmt_desktop.dart';
 import 'package:withfbase/pages/desktop/booking_form_desktop.dart';
+import 'package:withfbase/pages/desktop/events_management_desktop.dart';
 
 class HeroSectionDesktop extends StatelessWidget {
   final VoidCallback onExploreEvents;
@@ -16,7 +15,7 @@ class HeroSectionDesktop extends StatelessWidget {
   void _navigateToEvents(BuildContext context) {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => AdminEventsMgmtDesktop()),
+      MaterialPageRoute(builder: (_) => EventsManagementDesktop()),
     );
   }
 
@@ -30,7 +29,7 @@ class HeroSectionDesktop extends StatelessWidget {
   void _navigateToVenues(BuildContext context) {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => AdminVenuesMgmtPage()),
+      MaterialPageRoute(builder: (_) => EventsManagementDesktop()),
     );
   }
 

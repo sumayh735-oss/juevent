@@ -69,15 +69,7 @@ class _AdminCategoriesPageState extends State<CategoriesPageDesktop> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      endDrawer: Drawer(
-        child: ListView(
-          children: const [
-            DrawerHeader(child: Text("Admin Menu")),
-            ListTile(title: Text("Option 1")),
-            ListTile(title: Text("Option 2")),
-          ],
-        ),
-      ),
+  
       body: SafeArea(
         child: Stack(
           children: [
@@ -87,7 +79,7 @@ class _AdminCategoriesPageState extends State<CategoriesPageDesktop> {
               child: Column(
                 children: [
                   /// boos loogu talagalay header height (qiyaas 90px)
-                  const SizedBox(height: 150),
+                  const SizedBox(height: 110),
 
                   Card(
                     elevation: 3,
@@ -95,9 +87,12 @@ class _AdminCategoriesPageState extends State<CategoriesPageDesktop> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Padding(
+                      
                       padding: const EdgeInsets.all(12.0),
                       child: Row(
+                        
                         children: [
+                          
                           Expanded(
                             child: TextField(
                               controller: _categoryController,

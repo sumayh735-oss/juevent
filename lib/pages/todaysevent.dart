@@ -1,370 +1,336 @@
+// -----------------------------------------------------------------------------
+// todaysevent.dart
+// Beautiful, Live-Updating Today's Events Page (Somalia Time)
+// ----------------------------------------------------------------------------- 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:withfbase/pages/desktop/admin_events_mgmt_desktop.dart';
 
-/// ===== CONFIG =====
 const String kEventsCollection = 'events';
-const String kEventDateField = 'startDateTime';
-const String kEventTitleField = 'title';
-const String kVenueField = 'venue';
-const String kStartTimeField = 'startTime'; // optional string
-const String kEndTimeField = 'endTime'; // optional string
-
-/// Somalia (Africa/Mogadishu) = UTC+3
 const Duration kSomaliaTzOffset = Duration(hours: 3);
 
 class TodayEventsPage extends StatefulWidget {
   const TodayEventsPage({super.key});
+
   @override
   State<TodayEventsPage> createState() => _TodayEventsPageState();
 }
 
 class _TodayEventsPageState extends State<TodayEventsPage> {
-  final _searchCtrl = TextEditingController();
+  final TextEditingController _searchCtrl = TextEditingController();
 
-  DateTime get _somaliaStartOfTodayUtc {
+  DateTime get _somaliaStartUtc {
     final nowUtc = DateTime.now().toUtc();
     final nowSom = nowUtc.add(kSomaliaTzOffset);
     final startSom = DateTime(nowSom.year, nowSom.month, nowSom.day);
     return startSom.subtract(kSomaliaTzOffset);
   }
 
-  DateTime get _somaliaEndOfTodayUtc =>
-      _somaliaStartOfTodayUtc.add(const Duration(days: 1));
+  DateTime get _somaliaEndUtc => _somaliaStartUtc.add(const Duration(days: 1));
 
-  Query<Map<String, dynamic>> _todayQuerySomaliaUtc() {
+  Query<Map<String, dynamic>> _todayQuery() {
     return FirebaseFirestore.instance
         .collection(kEventsCollection)
-        .where(
-          kEventDateField,
-          isGreaterThanOrEqualTo: Timestamp.fromDate(_somaliaStartOfTodayUtc),
-        )
-        .where(
-          kEventDateField,
-          isLessThan: Timestamp.fromDate(_somaliaEndOfTodayUtc),
-        )
-        .orderBy(kEventDateField, descending: false)
-        .limit(300)
-        .withConverter<Map<String, dynamic>>(
-          fromFirestore: (snap, _) => snap.data() ?? <String, dynamic>{},
-          toFirestore: (data, _) => data,
-        );
+        .where('startDateTime',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(_somaliaStartUtc))
+        .where('startDateTime',
+            isLessThan: Timestamp.fromDate(_somaliaEndUtc))
+        .orderBy('startDateTime', descending: false);
   }
 
-  Future<void> _confirmAction({
-    required BuildContext context,
-    required String title,
-    required String message,
-    required VoidCallback onYes,
-  }) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: Text(title),
-            content: Text(message),
-            actions: [
-              TextButton(
-                child: const Text("No"),
-                onPressed: () => Navigator.of(ctx).pop(false),
-              ),
-              ElevatedButton(
-                child: const Text("Yes"),
-                onPressed: () => Navigator.of(ctx).pop(true),
-              ),
-            ],
-          ),
-    );
+  Future<void> _updateStatus(
+      String docId, String status, BuildContext context) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection(kEventsCollection)
+          .doc(docId)
+          .update({'status': status});
+      if (!mounted) return;
 
-    if (result == true) {
-      onYes();
+      // Snackbar success
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Event marked as $status."),
+          backgroundColor:
+              status == 'approved' ? Colors.green : Colors.redAccent,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      // Navigate to EventsManagementPage after short delay
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const AdminEventsMgmtDesktop()),
+      );
+    } catch (e) {
+      debugPrint('Error updating status: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final nowUtc = DateTime.now().toUtc();
-    final nowSom = nowUtc.add(kSomaliaTzOffset);
-    final dayLabel = DateFormat('EEEE, dd MMM yyyy').format(nowSom);
-    final df = DateFormat('dd MMM yyyy, HH:mm');
+    final nowSom = DateTime.now().toUtc().add(kSomaliaTzOffset);
+    final dateLabel = DateFormat('EEEE, dd MMM yyyy').format(nowSom);
+    final df = DateFormat('dd MMM yyyy, hh:mm a');
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _todayQuerySomaliaUtc().snapshots(),
-        builder: (context, snap) {
-          final docs = snap.data?.docs ?? const [];
+    return Scaffold(
+      
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _todayQuery().snapshots(),
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          final q = _searchCtrl.text.trim().toLowerCase();
-          final list =
-              docs.where((d) {
-                final m = d.data();
-                final title =
-                    (m[kEventTitleField] ?? '').toString().toLowerCase();
-                final venue = (m[kVenueField] ?? '').toString().toLowerCase();
-                final id = d.id.toLowerCase();
-                if (q.isEmpty) return true;
-                return title.contains(q) || venue.contains(q) || id.contains(q);
-              }).toList();
+            final docs = snap.data?.docs ?? [];
+            final query = _searchCtrl.text.trim().toLowerCase();
+            final list = docs.where((d) {
+              final m = d.data();
+              final title = (m['title'] ?? '').toString().toLowerCase();
+              final venue = (m['venue'] ?? '').toString().toLowerCase();
+              return query.isEmpty ||
+                  title.contains(query) ||
+                  venue.contains(query);
+            }).toList();
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Today's Events",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                dayLabel,
-                style: TextStyle(color: Theme.of(context).hintColor),
-              ),
-              const SizedBox(height: 12),
-
-              // Search
-              TextField(
-                controller: _searchCtrl,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search),
-                  hintText: 'Search by title / venue...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  dateLabel,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: Colors.grey,
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-
-              if (snap.connectionState == ConnectionState.waiting)
-                const Center(child: CircularProgressIndicator())
-              else if (list.isEmpty)
-                Center(
-                  child: Column(
-                    children: const [
-                      SizedBox(height: 24),
-                      Icon(Icons.event_busy, size: 64, color: Colors.grey),
-                      SizedBox(height: 12),
-                      Text(
-                        'No Events Today',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 6),
-                      Text(
-                        'There are no events scheduled for today.',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _searchCtrl,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search),
+                    hintText: 'Search by title or venue...',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
-                )
-              else
-                Column(
-                  children:
-                      list.map((doc) {
-                        final m = doc.data();
-                        final title =
-                            (m[kEventTitleField] ?? 'Untitled').toString();
-                        final venue = (m[kVenueField] ?? '-').toString();
-                        final status = (m['status'] ?? 'pending').toString();
-
-                        final startTs = m[kEventDateField] as Timestamp?;
-                        final start = startTs?.toDate();
-
-                        String timeLabel() {
-                          final s =
-                              (m[kStartTimeField] ?? '').toString().trim();
-                          final e = (m[kEndTimeField] ?? '').toString().trim();
-                          if (s.isNotEmpty && e.isNotEmpty) return '$s – $e';
-                          if (s.isNotEmpty) return s;
-                          return start == null
-                              ? '-'
-                              : df.format(start.toLocal());
-                        }
-
-                        return Card(
-                          elevation: 4,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: list.isEmpty
+                      ? const Center(
+                          child: Text(
+                            "No events scheduled for today.",
+                            style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500),
                           ),
-                          margin: const EdgeInsets.only(bottom: 16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Image
-                              ClipRRect(
-                                borderRadius: const BorderRadius.vertical(
-                                  top: Radius.circular(12),
-                                ),
-                                child: Image.network(
-                                  (m['imageUrl'] ?? '').toString(),
-                                  height: 160,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                  errorBuilder:
-                                      (_, __, ___) => Container(
-                                        height: 160,
-                                        color: Colors.grey[300],
-                                        child: const Icon(
-                                          Icons.image_not_supported,
-                                        ),
-                                      ),
-                                ),
-                              ),
+                        )
+                      : ListView.builder(
+                          itemCount: list.length,
+                          itemBuilder: (context, i) {
+                            final doc = list[i];
+                            final m = doc.data();
+                            final title =
+                                (m['title'] ?? 'Untitled Event').toString();
+                            final venue = (m['venue'] ?? '-').toString();
+                            final desc =
+                                (m['description'] ?? '').toString().trim();
+                            final status =
+                                (m['status'] ?? 'pending').toString();
 
-                              Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    // Title & Time
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            title,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 18,
+                            final ts = m['startDateTime'] as Timestamp?;
+                            final date = ts?.toDate();
+                            final formatted =
+                                date == null ? '-' : df.format(date.toLocal());
+
+                            Color badgeColor;
+                            if (status == 'approved') {
+                              badgeColor = Colors.green;
+                            } else if (status == 'rejected') {
+                              badgeColor = Colors.redAccent;
+                            } else {
+                              badgeColor = Colors.orange;
+                            }
+
+                            final image = (m['imageUrl'] ?? '').toString();
+
+                            return Card(
+                              elevation: 3,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              margin: const EdgeInsets.only(bottom: 18),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Image
+                                  ClipRRect(
+                                    borderRadius: const BorderRadius.vertical(
+                                        top: Radius.circular(16)),
+                                    child: image.isNotEmpty
+                                        ? Image.network(
+                                            image,
+                                            height: 180,
+                                            width: double.infinity,
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (_, __, ___) => Container(
+                                              height: 180,
+                                              color: Colors.grey[300],
+                                              child: const Icon(
+                                                  Icons.broken_image,
+                                                  size: 48,
+                                                  color: Colors.grey),
+                                            ),
+                                          )
+                                        : Container(
+                                            height: 180,
+                                            color: Colors.grey[200],
+                                            child: const Center(
+                                              child: Icon(Icons.image,
+                                                  size: 60, color: Colors.grey),
                                             ),
                                           ),
-                                        ),
-                                        const Icon(Icons.schedule, size: 16),
-                                        const SizedBox(width: 4),
-                                        Text(timeLabel()),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 6),
+                                  ),
 
-                                    Text(
-                                      "📍 $venue",
-                                      style: TextStyle(color: Colors.grey[700]),
-                                    ),
-                                    const SizedBox(height: 6),
-
-                                    Text(
-                                      "Status: $status",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color:
-                                            status == 'approved'
-                                                ? Colors.green
-                                                : status == 'rejected'
-                                                ? Colors.red
-                                                : Colors.orange,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-
-                                    Text(
-                                      (m['description'] ?? '').toString(),
-                                      maxLines: 3,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(color: Colors.grey[600]),
-                                    ),
-                                    const SizedBox(height: 12),
-
-                                    // Action buttons with confirmation
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
+                                  // Content
+                                  Padding(
+                                    padding: const EdgeInsets.all(14),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        ElevatedButton.icon(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                status == 'approved'
-                                                    ? Colors.grey
-                                                    : Colors.green,
-                                          ),
-                                          onPressed:
-                                              status == 'approved'
-                                                  ? null // ✅ Disable haddii horey loo approve-gareeyay
-                                                  : () {
-                                                    FirebaseFirestore.instance
-                                                        .collection(
-                                                          kEventsCollection,
-                                                        )
-                                                        .doc(doc.id)
-                                                        .update({
-                                                          'status': 'approved',
-                                                        });
-                                                  },
-                                          icon: const Icon(
-                                            Icons.check,
-                                            size: 18,
-                                          ),
-                                          label: Text(
-                                            status == 'approved'
-                                                ? "Approved"
-                                                : "Approve",
-                                          ),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                title,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 18,
+                                                ),
+                                              ),
+                                            ),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color:
+                                                    badgeColor.withOpacity(0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                status.toUpperCase(),
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: badgeColor,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.calendar_today,
+                                                size: 16,
+                                                color: Colors.grey),
+                                            const SizedBox(width: 4),
+                                            Text(formatted),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text("📍 $venue",
+                                            style: const TextStyle(
+                                                color: Colors.black54)),
+                                        const SizedBox(height: 8),
+                                        if (desc.isNotEmpty)
+                                          Text(
+                                            desc,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                                color: Colors.black54),
+                                          ),
+                                        const SizedBox(height: 12),
 
-                                        ElevatedButton.icon(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.red,
-                                          ),
-                                          onPressed: () {
-                                            _confirmAction(
-                                              context: context,
-                                              title: "Reject Event",
-                                              message:
-                                                  "Are you sure you want to reject this event?",
-                                              onYes: () {
-                                                FirebaseFirestore.instance
-                                                    .collection(
-                                                      kEventsCollection,
-                                                    )
-                                                    .doc(doc.id)
-                                                    .update({
-                                                      'status': 'rejected',
-                                                    });
-                                              },
-                                            );
-                                          },
-                                          icon: const Icon(
-                                            Icons.close,
-                                            size: 18,
-                                          ),
-                                          label: const Text("Reject"),
-                                        ),
-                                        OutlinedButton.icon(
-                                          onPressed: () {
-                                            _confirmAction(
-                                              context: context,
-                                              title: "Delete Event",
-                                              message:
-                                                  "Are you sure you want to delete this event?",
-                                              onYes: () {
-                                                FirebaseFirestore.instance
-                                                    .collection(
-                                                      kEventsCollection,
-                                                    )
-                                                    .doc(doc.id)
-                                                    .delete();
-                                              },
-                                            );
-                                          },
-                                          icon: const Icon(
-                                            Icons.delete,
-                                            size: 18,
-                                          ),
-                                          label: const Text("Delete"),
+                                        // Action Buttons
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            ElevatedButton.icon(
+                                              style:
+                                                  ElevatedButton.styleFrom(
+                                                backgroundColor:
+                                                    status == 'approved'
+                                                        ? Colors.grey
+                                                        : Colors.green,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 16,
+                                                        vertical: 10),
+                                              ),
+                                              icon: const Icon(Icons.check,
+                                                  size: 18),
+                                              label: Text(
+                                                status == 'approved'
+                                                    ? "Approved"
+                                                    : "Approve",
+                                              ),
+                                              onPressed: status == 'approved' ||
+                                                      status == 'rejected'
+                                                  ? null
+                                                  : () => _updateStatus(
+                                                      doc.id,
+                                                      'approved',
+                                                      context),
+                                            ),
+                                            ElevatedButton.icon(
+                                              style:
+                                                  ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.red,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 16,
+                                                        vertical: 10),
+                                              ),
+                                              icon: const Icon(Icons.close,
+                                                  size: 18),
+                                              label: const Text("Reject"),
+                                              onPressed: status ==
+                                                          'rejected' ||
+                                                      status == 'approved'
+                                                  ? null
+                                                  : () => _updateStatus(
+                                                      doc.id,
+                                                      'rejected',
+                                                      context),
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
+                            );
+                          },
+                        ),
                 ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }

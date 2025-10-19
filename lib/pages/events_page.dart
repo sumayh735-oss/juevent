@@ -17,6 +17,8 @@ class EventsPage extends StatefulWidget {
 class _EventsPageState extends State<EventsPage> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+List<String> eventTypes = ['All Types'];
+List<String> halls = ['All Venues'];
 
   bool showFilter = false;
 
@@ -29,6 +31,30 @@ class _EventsPageState extends State<EventsPage> {
     _scrollController.dispose();
     super.dispose();
   }
+@override
+void initState() {
+  super.initState();
+  _loadCategories();
+  _loadVenues();
+}
+
+Future<void> _loadCategories() async {
+  final snapshot = await FirebaseFirestore.instance.collection('categories').get();
+  final types = snapshot.docs.map((doc) => doc['name'].toString()).toList();
+
+  setState(() {
+    eventTypes = ['All Types', ...types];
+  });
+}
+
+Future<void> _loadVenues() async {
+  final snapshot = await FirebaseFirestore.instance.collection('venues').get();
+  final vens = snapshot.docs.map((doc) => doc['name'].toString()).toList();
+
+  setState(() {
+    halls = ['All Venues', ...vens];
+  });
+}
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +67,7 @@ class _EventsPageState extends State<EventsPage> {
             slivers: [
               const SliverToBoxAdapter(child: SizedBox(height: 140)),
 
+              // Title + Filter Button
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -70,16 +97,147 @@ class _EventsPageState extends State<EventsPage> {
                 ),
               ),
 
+              // Filter Section
+              if (showFilter)
+  SliverToBoxAdapter(
+    child: Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ✅ Event Type from Firestore
+          _buildFilterRow(
+            label: 'Event Type',
+            value: selectedEventType,
+            options: eventTypes,
+            onChanged: (value) => setState(() => selectedEventType = value!),
+          ),
+          const SizedBox(height: 16),
+
+          // ✅ Date Range same as before
+          _buildFilterRow(
+            label: 'Date Range',
+            value: selectedDateRange,
+            options: [
+              'Any Date',
+              'This Week',
+              'Next Week',
+              'This Month',
+            ],
+            onChanged: (value) => setState(() => selectedDateRange = value!),
+          ),
+          const SizedBox(height: 16),
+
+          // ✅ Hall from Firestore
+          _buildFilterRow(
+            label: 'Hall',
+            value: selectedHall,
+            options: halls,
+            onChanged: (value) => setState(() => selectedHall = value!),
+          ),
+          const SizedBox(height: 16),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    selectedEventType = 'All Types';
+                    selectedDateRange = 'Any Date';
+                    selectedHall = 'All Venues';
+                  });
+                },
+                child: const Text('Reset'),
+              ),
+              ElevatedButton(
+                onPressed: () => setState(() => showFilter = false),
+                child: const Text('Apply Filters'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  ),
+              // Event List
               StreamBuilder<QuerySnapshot>(
                 stream:
-                    FirebaseFirestore.instance
-                        .collection('events')
-                        .where(
-                          'status',
-                          isEqualTo: 'Approved',
-                        ) // kaliya Approved
-                        .orderBy('startDateTime', descending: false)
-                        .snapshots(),
+                    (() {
+                      Query query = FirebaseFirestore.instance.collection(
+                        'events',
+                      );
+
+                      // Filter by status Approved only (for user view)
+                      query = query.where('status', isEqualTo: 'Approved');
+
+                      // Filter by category (event type)
+                      if (selectedEventType != 'All Types') {
+                        query = query.where(
+                          'category',
+                          isEqualTo: selectedEventType,
+                        );
+                      }
+
+                      // Filter by venue
+                      if (selectedHall != 'All Venues') {
+                        query = query.where('venue', isEqualTo: selectedHall);
+                      }
+
+                      // Filter by date range on startDateTime
+final now = DateTime.now();
+
+DateTime startDateFilter = DateTime(1900); // default: include all
+DateTime endDateFilter = DateTime(2100);   // default: include all
+
+if (selectedDateRange == 'This Week') {
+  final startOfWeek = DateTime(now.year, now.month, now.day - (now.weekday - 1));
+  final endOfWeek = startOfWeek
+      .add(const Duration(days: 7))
+      .subtract(const Duration(seconds: 1)); // end of week at 23:59:59
+
+  startDateFilter = startOfWeek;
+  endDateFilter = endOfWeek;
+} else if (selectedDateRange == 'Next Week') {
+  final startOfNextWeek = DateTime(now.year, now.month, now.day - (now.weekday - 1))
+      .add(const Duration(days: 7));
+  final endOfNextWeek = startOfNextWeek
+      .add(const Duration(days: 7))
+      .subtract(const Duration(seconds: 1));
+
+  startDateFilter = startOfNextWeek;
+  endDateFilter = endOfNextWeek;
+} else if (selectedDateRange == 'This Month') {
+  final startOfMonth = DateTime(now.year, now.month, 1);
+  final endOfMonth = DateTime(now.year, now.month + 1, 1)
+      .subtract(const Duration(seconds: 1));
+
+  startDateFilter = startOfMonth;
+  endDateFilter = endOfMonth;
+}
+
+// ✅ Apply to Firestore
+query = query
+    .where('startDateTime',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(startDateFilter))
+    .where('startDateTime',
+        isLessThanOrEqualTo: Timestamp.fromDate(endDateFilter));
+
+
+                      return query.snapshots();
+                    })(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const SliverToBoxAdapter(
@@ -100,10 +258,14 @@ class _EventsPageState extends State<EventsPage> {
                   }
 
                   final events =
-                      snapshot.data!.docs.map((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        return EventModel.fromMap(data, doc.id);
-                      }).toList();
+                      snapshot.data!.docs
+                          .map(
+                            (doc) => EventModel.fromMap(
+                              doc.data() as Map<String, dynamic>,
+                              doc.id,
+                            ),
+                          )
+                          .toList();
 
                   return SliverList(
                     delegate: SliverChildBuilderDelegate((context, index) {
@@ -119,6 +281,7 @@ class _EventsPageState extends State<EventsPage> {
                   );
                 },
               ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
               const SliverToBoxAdapter(child: FooterPage()),
             ],
           ),
@@ -137,7 +300,29 @@ class _EventsPageState extends State<EventsPage> {
       ),
     );
   }
-
+ Widget _buildFilterRow({
+    required String label,
+    required String value,
+    required List<String> options,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        DropdownButton<String>(
+          isExpanded: true,
+          value: value,
+          items:
+              options
+                  .map((opt) => DropdownMenuItem(value: opt, child: Text(opt)))
+                  .toList(),
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
   Widget _eventCard(EventModel event) {
     final now = DateTime.now();
     event.endDateTime.isBefore(now);

@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:withfbase/pages/desktop/admin_events_mgmt_desktop.dart';
+import 'package:withfbase/pages/desktop/availability_page_desktop.dart';
 import 'package:withfbase/pages/desktop/category_chips_desktop.dart';
+import 'package:withfbase/pages/desktop/events_management_desktop.dart';
 import 'package:withfbase/pages/desktop/featured_venues_desktop.dart';
 import 'package:withfbase/pages/desktop/upcomingevent_desktop.dart';
-import 'package:withfbase/pages/availability_page.dart';
+import 'package:withfbase/pages/desktop/venues_page_desktop.dart';
 import 'package:withfbase/widgets/booking_prompt_card.dart';
 import 'package:withfbase/pages/footer.dart';
 import 'home_header_desktop.dart';
 import 'hero_section_desktop.dart';
-   
+
 class HomepageDesktop extends StatefulWidget {
   const HomepageDesktop({super.key});
 
@@ -18,21 +19,21 @@ class HomepageDesktop extends StatefulWidget {
 
 class _HomepageDesktopState extends State<HomepageDesktop> {
   final ScrollController _scrollController = ScrollController();
-  
-  // ✅ default All Events
-  String _selectedCategory = "All Events";  
+
+  // ✅ Default category = All Events
+  String _selectedCategory = "All Events";
 
   void _navigateToEvents() {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => AdminEventsMgmtDesktop()),
+      MaterialPageRoute(builder: (_) => const EventsManagementDesktop()),
     );
   }
 
   void _navigateToVenues() {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => AdminEventsMgmtDesktop()),
+      MaterialPageRoute(builder: (_) => const VenuesPageDesktop()),
     );
   }
 
@@ -40,7 +41,7 @@ class _HomepageDesktopState extends State<HomepageDesktop> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const AvailabilityPage(isLoggedIn: true),
+        builder: (context) => const AvailabilityPageDesktop(isLoggedIn: true),
       ),
     );
   }
@@ -71,11 +72,18 @@ class _HomepageDesktopState extends State<HomepageDesktop> {
   }
 
   @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey.shade50,
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1550), // ✅ sax 1550
+          constraints: const BoxConstraints(maxWidth: 1550),
           child: Stack(
             children: [
               Scrollbar(
@@ -85,14 +93,16 @@ class _HomepageDesktopState extends State<HomepageDesktop> {
                 radius: const Radius.circular(8),
                 child: ListView(
                   controller: _scrollController,
+                  padding: EdgeInsets.zero,
                   children: [
+                    // ✅ Hero Section
                     HeroSectionDesktop(
                       onExploreEvents: _navigateToEvents,
                       onCheckAvailability: _navigateToAvailability,
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 20),
 
-                    // ✅ Categories filter
+                    // ✅ Categories (centered)
                     CategoryChipsDesktop(
                       selected: _selectedCategory,
                       onSelected: (label) {
@@ -101,36 +111,44 @@ class _HomepageDesktopState extends State<HomepageDesktop> {
                         });
                       },
                     ),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 10),
 
-                    // Featured Venues with filter
+                    // ✅ Featured Venues
                     _sectionHeader("Featured Venues", _navigateToVenues),
-                      const SizedBox(height: 15),
-                      const FeaturedVenuesDesktop(),
-                      const SizedBox(height: 24),
+                    const SizedBox(height: 15),
+                    const FeaturedVenuesDesktop(),
+                    const SizedBox(height: 24),
 
-                    // Upcoming Events with filter
+                    // ✅ Upcoming Events (filtered by selected category)
                     _sectionHeader("Upcoming Events", _navigateToEvents),
                     UpcomingeventDesktop(category: _selectedCategory),
                     const SizedBox(height: 40),
 
+                    // ✅ Booking prompt
                     BookingPromptCard(
                       onCheckAvailability: _navigateToAvailability,
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 0.1),
 
+                    // ✅ Footer
                     const FooterPage(),
                   ],
                 ),
               ),
 
-              // Fixed header
+              // ✅ Fixed Header on Top
               Positioned(
                 top: 0,
                 left: 0,
                 right: 0,
                 child: HomeHeaderDesktop(
-                  onMenuTap: () => Scaffold.of(context).openEndDrawer(), title: 'Home Page',
+                  title: 'Jazeera Hall Events',
+                  onMenuTap: () {
+                    // Haddii aad leedahay drawer, ku furi halkan
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Menu tapped")),
+                    );
+                  },
                 ),
               ),
             ],

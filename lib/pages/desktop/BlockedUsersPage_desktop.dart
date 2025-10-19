@@ -1,7 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+// Header-kaaga
 import 'package:withfbase/pages/desktop/admin_home_header_desktop.dart';
+
+// 🔗 KU DAR: page-ka akhrinta business doc
+import 'package:withfbase/pages/desktop/business_document_page.dart';
 
 class BlockedUsersPageDesktop extends StatefulWidget {
   const BlockedUsersPageDesktop({super.key});
@@ -65,7 +70,7 @@ class _BlockedUsersPageDesktopState extends State<BlockedUsersPageDesktop> {
   Future<void> unblockUser(String docId, String displayName) async {
     try {
       await FirebaseFirestore.instance.collection('users').doc(docId).update({
-        'blacklisted': false, // hubi in field-kan sax yahay
+        'blacklisted': false,
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
@@ -135,7 +140,7 @@ class _BlockedUsersPageDesktopState extends State<BlockedUsersPageDesktop> {
         SnackBar(content: Text('Failed: $e')),
       );
     } finally {
-      if (mounted) Navigator.pop(context); // close progress dialog
+      if (mounted) Navigator.pop(context);
     }
   }
 
@@ -150,7 +155,8 @@ class _BlockedUsersPageDesktopState extends State<BlockedUsersPageDesktop> {
               left: 0,
               right: 0,
               child: AdminHomeHeaderDesktop(
-                onMenuTap: () => Scaffold.of(context).openEndDrawer(), title: 'Block users',
+                onMenuTap: () => Scaffold.of(context).openEndDrawer(),
+                title: 'Block users',
               ),
             ),
             const Positioned.fill(
@@ -171,7 +177,8 @@ class _BlockedUsersPageDesktopState extends State<BlockedUsersPageDesktop> {
               left: 0,
               right: 0,
               child: AdminHomeHeaderDesktop(
-                onMenuTap: () => Scaffold.of(context).openEndDrawer(), title: 'Block users',
+                onMenuTap: () => Scaffold.of(context).openEndDrawer(),
+                title: 'Block users',
               ),
             ),
             const Positioned.fill(
@@ -199,7 +206,8 @@ class _BlockedUsersPageDesktopState extends State<BlockedUsersPageDesktop> {
             left: 0,
             right: 0,
             child: AdminHomeHeaderDesktop(
-              onMenuTap: () => Scaffold.of(context).openEndDrawer(), title: 'Block users',
+              onMenuTap: () => Scaffold.of(context).openEndDrawer(),
+              title: 'Block users',
             ),
           ),
           Positioned.fill(
@@ -219,7 +227,8 @@ class _BlockedUsersPageDesktopState extends State<BlockedUsersPageDesktop> {
                         final name = (m['displayName'] ?? m['username'] ?? '')
                             .toString()
                             .toLowerCase();
-                        final email = (m['email'] ?? '').toString().toLowerCase();
+                        final email =
+                            (m['email'] ?? '').toString().toLowerCase();
                         return name.contains(_query) || email.contains(_query);
                       }).toList();
 
@@ -363,9 +372,20 @@ class _BlockedUsersPageDesktopState extends State<BlockedUsersPageDesktop> {
                                 email: email,
                                 role:
                                     role.isEmpty ? null : role.toUpperCase(),
-                                dateLabel:
-                                    ts == null ? null : _fmt(ts),
+                                dateLabel: ts == null ? null : _fmt(ts),
                                 onUnblock: () => unblockUser(doc.id, name),
+
+                                // 👉 Halkan ayaan ka wacaynaa file-ka cusub:
+                                onReadDoc: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => BusinessDocumentPage(
+                                   
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                             );
                           },
@@ -428,12 +448,16 @@ class _UserCard extends StatelessWidget {
   final String? dateLabel;
   final VoidCallback onUnblock;
 
+  // 🔗 Button cusub:
+  final VoidCallback onReadDoc;
+
   const _UserCard({
     required this.name,
     required this.email,
     this.role,
     this.dateLabel,
     required this.onUnblock,
+    required this.onReadDoc,
   });
 
   @override
@@ -510,6 +534,20 @@ class _UserCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
+
+            // 🔘 “Read doc”
+            OutlinedButton.icon(
+              onPressed: onReadDoc,
+              icon: const Icon(Icons.description, size: 18),
+              label: const Text('Read doc'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // 🔓 “Unblock”
             ElevatedButton.icon(
               onPressed: onUnblock,
               icon: const Icon(Icons.lock_open, size: 18),
@@ -518,11 +556,8 @@ class _UserCard extends StatelessWidget {
                 elevation: 0,
                 backgroundColor: Colors.green.shade600,
                 foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 textStyle: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ),

@@ -3,10 +3,10 @@ import 'package:withfbase/pages/admin_events_mgmt.dart';
 import 'package:withfbase/pages/admin_venues_mgmt_page.dart';
 import 'package:withfbase/pages/admindashboard.dart';
 import 'package:withfbase/pages/categories_page.dart';
+import 'package:withfbase/pages/full_event_report_page.dart';
 import 'package:withfbase/pages/homepage.dart';
 import 'package:withfbase/widgets/BlockedUsersPage.dart';
 import 'package:withfbase/widgets/adminDrawer.dart';
-import 'package:withfbase/pages/report2.dart';
 
 class MainAdminPage extends StatefulWidget {
   final int initialIndex;

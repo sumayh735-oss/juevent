@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:withfbase/pages/footer.dart';
 import 'package:withfbase/widgets/home_header.dart';
 import 'package:withfbase/widgets/venue_detail_page.dart';
-import 'package:withfbase/widgets/notification_service.dart'; // Import NotificationService
 
 class VenuesPage extends StatefulWidget {
   const VenuesPage({super.key});
@@ -127,28 +126,7 @@ class _VenuesPageState extends State<VenuesPage> {
           ),
 
           // Halkan waxaan ku daray button-ka floating action button-ka
-          Positioned(
-            bottom: 20,
-            right: 20,
-            child: FloatingActionButton(
-              onPressed: () async {
-                final scheduledTime = DateTime.now().add(
-                  const Duration(seconds: 5),
-                );
-                await NotificationService.scheduleNotification(
-                  id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                  title: "Tijaabi Notification",
-                  body: "Notification-kan wuxuu imaanayaa 5 ilbiriqsi kadib",
-                  scheduledDate: scheduledTime,
-                );
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Notification jadwaleeyay!')),
-                );
-              },
-              tooltip: 'Tijaabi Notification',
-              child: const Icon(Icons.notifications_active),
-            ),
-          ),
+          
         ],
       ),
     );

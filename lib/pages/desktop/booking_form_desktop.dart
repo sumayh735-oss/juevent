@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:withfbase/pages/add_event_page.dart';
+import 'package:withfbase/pages/desktop/add_event_page_desktop.dart';
 import 'package:withfbase/pages/desktop/home_header_desktop.dart';
 import 'package:withfbase/pages/footer.dart';
 import 'package:withfbase/pages/loginpage.dart';
@@ -149,7 +149,7 @@ Future<void> _bookSelected() async {
   await Navigator.push(
     context,
     MaterialPageRoute(
-      builder: (_) => AddEventPage(
+      builder: (_) => AddEventPageDesktop(
         venue: selectedVenue!,
         date: firstDate,
         timeSlot: firstShifts.join(", "),
@@ -216,7 +216,7 @@ Widget build(BuildContext context) {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         DropdownButtonFormField<String>(
-                          value: selectedVenue,
+                          initialValue: selectedVenue,
                           decoration: const InputDecoration(
                             labelText: 'Select Venue',
                             border: OutlineInputBorder(),

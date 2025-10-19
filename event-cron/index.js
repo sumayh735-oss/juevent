@@ -28,9 +28,10 @@ async function expireEvents() {
   const now = new Date();
   console.log(`[${now.toISOString()}] ⏳ Running expire job...`);
 
+  // Eeg event-yada Approved ama Expired (labadaba)
   const snapshot = await db
     .collection("events")
-    .where("status", "==", "Approved")
+    .where("status", "in", ["Approved", "Expired"])
     .get();
 
   for (const doc of snapshot.docs) {
@@ -46,10 +47,10 @@ async function expireEvents() {
       continue;
     }
 
-    if (endDateTime < now) {
+    // ✅ CASE 1: Haddii waqtigu dhaafay → dhig Expired
+    if (endDateTime < now && data.status === "Approved") {
       console.log(`[${now.toISOString()}] ⚠️ Expiring event: ${data.title}`);
 
-      // Update event status
       await doc.ref.update({ status: "Expired" });
 
       const organizerEmail = data.organizerEmail;
@@ -78,7 +79,7 @@ async function expireEvents() {
       const expiredCount = (userDoc.data().expiredCount || 0) + 1;
       await userDoc.ref.update({ expiredCount });
 
-      // 📧 Send email warning
+      // 📧 Email notification
       const mailOptions = {
         from: '"Jazeera Admin" <sumayh735@gmail.com>',
         to: organizerEmail,
@@ -98,19 +99,28 @@ async function expireEvents() {
         );
       }
 
-      // 🚫 Blacklist after 3
+      // 🚫 Blacklist after 3 expired events
       if (expiredCount >= 3) {
         await userDoc.ref.update({
-  isBlacklisted: true,
-  blockedAt: admin.firestore.FieldValue.serverTimestamp(),
-});
+          isBlacklisted: true,
+          blockedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
         console.log(
           `[${now.toISOString()}] 🚫 User ${organizerEmail} blacklisted (3 expired events)`
         );
       }
     }
+
+    // ✅ CASE 2: Haddii waqtigu aan weli gaarin → soo celi Approved
+    if (endDateTime > now && data.status === "Expired") {
+      await doc.ref.update({ status: "Approved" });
+      console.log(
+        `[${now.toISOString()}] ✅ Event reactivated (Approved again): ${data.title}`
+      );
+    }
   }
 }
+
 
 // 🚀 Script start
 console.log("🚀 Script started!");

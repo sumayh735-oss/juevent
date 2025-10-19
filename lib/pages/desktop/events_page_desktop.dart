@@ -2,9 +2,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:withfbase/pages/desktop/event_detail_page_desktop.dart';
 import 'package:withfbase/pages/desktop/home_header_desktop.dart';
 import 'package:withfbase/pages/event_model.dart';
-import 'package:withfbase/widgets/event_detail_page.dart';
 import 'package:withfbase/pages/footer.dart';
 
 class EventsPageDesktop extends StatefulWidget {
@@ -21,7 +21,7 @@ class _EventsPageDesktopState extends State<EventsPageDesktop> {
   bool showFilter = false;
   String searchQuery = "";
 
-  /// Filters
+  // Filters
   String selectedEventType = "All Types";
   String selectedDateRange = "Any Date";
   String selectedHall = "All Venues";
@@ -32,8 +32,17 @@ class _EventsPageDesktopState extends State<EventsPageDesktop> {
     super.dispose();
   }
 
+  int _gridColumnsForWidth(double w) {
+    if (w >= 1360) return 4;
+    if (w >= 1080) return 3;
+    if (w >= 820) return 2;
+    return 1;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+
     return Scaffold(
       key: _scaffoldKey,
       body: Stack(
@@ -43,73 +52,71 @@ class _EventsPageDesktopState extends State<EventsPageDesktop> {
             slivers: [
               const SliverToBoxAdapter(child: SizedBox(height: 120)),
 
-              /// 🔹 Title + Filter/Search/Refresh
+              /// Title + actions
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                  padding: const EdgeInsets.fromLTRB(32, 8, 32, 4),
                   child: Row(
                     children: [
                       const Text(
-                        "Upcoming Events",
+                        "All Events",
                         style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: .3,
                         ),
-                      ),
-                      const Spacer(),
-
-                      /// Filter button
-                      IconButton(
-                        icon: Icon(
-                          showFilter ? Icons.filter_alt : Icons.filter_alt_outlined,
-                          color: Colors.black87,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            showFilter = !showFilter;
-                          });
-                        },
                       ),
                       const SizedBox(width: 12),
-
-                      /// Search box
+                      const Icon(Icons.event_available_rounded, color: Colors.blueGrey),
+                      const Spacer(),
+                      // Filter toggle
+                      Tooltip(
+                        message: "Filters",
+                        child: IconButton(
+                          icon: Icon(
+                            showFilter ? Icons.filter_alt : Icons.filter_alt_outlined,
+                            color: Colors.black87,
+                          ),
+                          onPressed: () => setState(() => showFilter = !showFilter),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Search
                       SizedBox(
-                        width: 250,
+                        width: 280,
                         child: TextField(
-                          onChanged: (value) {
-                            setState(() {
-                              searchQuery = value;
-                            });
-                          },
+                          onChanged: (v) => setState(() => searchQuery = v),
                           decoration: InputDecoration(
-                            hintText: "Search events...",
+                            hintText: "Search events…",
                             prefixIcon: const Icon(Icons.search),
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 0,
-                              horizontal: 12,
-                            ),
+                            suffixIcon: searchQuery.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: "Clear",
+                                    icon: const Icon(Icons.close),
+                                    onPressed: () => setState(() => searchQuery = ""),
+                                  ),
+                            filled: true,
+                            fillColor: Colors.grey.shade100,
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(6),
-                              borderSide: const BorderSide(color: Colors.grey),
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
                             ),
+                            isDense: true,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
-
-                      /// Refresh button
+                      const SizedBox(width: 8),
+                      // Refresh
                       ElevatedButton.icon(
-                        onPressed: () {
-                          setState(() {}); // reload page
-                        },
+                        onPressed: () => setState(() {}),
                         icon: const Icon(Icons.refresh, size: 18),
                         label: const Text("Refresh"),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blue,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         ),
                       ),
                     ],
@@ -117,194 +124,114 @@ class _EventsPageDesktopState extends State<EventsPageDesktop> {
                 ),
               ),
 
- /// 🔹 Filter Panel
-if (showFilter)
-  SliverToBoxAdapter(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(6),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black12.withOpacity(0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            )
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                /// Event Type
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Event Type",
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<String>(
-                        value: selectedEventType,
-                        items: [
-                          "All Types",
-                          "Conference",
-                          "Seminar",
-                          "Workshop",
-                          "Cultural",
-                          "Sports"
-                        ]
-                            .map((e) =>
-                                DropdownMenuItem(value: e, child: Text(e)))
-                            .toList(),
-                        onChanged: (val) =>
-                            setState(() => selectedEventType = val!),
-                        decoration: InputDecoration(
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: BorderSide(color: Colors.grey.shade400),
+              /// Filter panel (animated)
+              SliverToBoxAdapter(
+                child: AnimatedCrossFade(
+                  duration: const Duration(milliseconds: 220),
+                  crossFadeState:
+                      showFilter ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                  firstChild: const SizedBox.shrink(),
+                  secondChild: Padding(
+                    padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
+                    child: Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade200),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x11000000),
+                            blurRadius: 12,
+                            offset: Offset(0, 4),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-
-                /// Date Range
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Date Range",
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<String>(
-                        value: selectedDateRange,
-                        items: [
-                          "Any Date",
-                          "Today",
-                          "This Week",
-                          "This Month",
-                        ]
-                            .map((e) =>
-                                DropdownMenuItem(value: e, child: Text(e)))
-                            .toList(),
-                        onChanged: (val) =>
-                            setState(() => selectedDateRange = val!),
-                        decoration: InputDecoration(
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: BorderSide(color: Colors.grey.shade400),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              // Event type
+                              Expanded(
+                                child: _LabeledDropdown(
+                                  label: "Event Type",
+                                  value: selectedEventType,
+                                  items: const [
+                                    "All Types",
+                                    "Conference",
+                                    "Seminar",
+                                    "Workshop",
+                                    "Cultural",
+                                    "Sports",
+                                  ],
+                                  onChanged: (v) => setState(() => selectedEventType = v),
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              // Date range
+                              Expanded(
+                                child: _LabeledDropdown(
+                                  label: "Date Range",
+                                  value: selectedDateRange,
+                                  items: const ["Any Date", "Today", "This Week", "This Month"],
+                                  onChanged: (v) => setState(() => selectedDateRange = v),
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              // Hall
+                              Expanded(
+                                child: _LabeledDropdown(
+                                  label: "Hall",
+                                  value: selectedHall,
+                                  items: const ["All Venues", "Venue 1", "Venue 2", "Venue 3"],
+                                  onChanged: (v) => setState(() => selectedHall = v),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
+                          const SizedBox(height: 14),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              OutlinedButton(
+                                onPressed: () {
+                                  setState(() {
+                                    selectedEventType = "All Types";
+                                    selectedDateRange = "Any Date";
+                                    selectedHall = "All Venues";
+                                  });
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 18, vertical: 12),
+                                  side: BorderSide(color: Colors.grey.shade300),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10)),
+                                ),
+                                child: const Text("Reset"),
+                              ),
+                              const SizedBox(width: 10),
+                              FilledButton.icon(
+                                onPressed: () => setState(() {}),
+                                icon: const Icon(Icons.tune),
+                                label: const Text("Apply Filters"),
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 18, vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ],
+                          )
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
-                const SizedBox(width: 16),
+              ),
 
-                /// Hall
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Hall",
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<String>(
-                        value: selectedHall,
-                        items: [
-                          "All Venues",
-                          "Venue 1",
-                          "Venue 2",
-                          "Venue 3",
-                        ]
-                            .map((e) =>
-                                DropdownMenuItem(value: e, child: Text(e)))
-                            .toList(),
-                        onChanged: (val) =>
-                            setState(() => selectedHall = val!),
-                        decoration: InputDecoration(
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: BorderSide(color: Colors.grey.shade400),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            /// Buttons
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                OutlinedButton(
-                  onPressed: () {
-                    setState(() {
-                      selectedEventType = "All Types";
-                      selectedDateRange = "Any Date";
-                      selectedHall = "All Venues";
-                    });
-                  },
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.grey.shade400),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  ),
-                  child: const Text("Reset"),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: () => setState(() {}),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                  ),
-                  child: const Text("Apply Filters"),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    ),
-  ),
-              /// 🔹 Events List
+              /// Events list
               StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('events')
@@ -314,19 +241,28 @@ if (showFilter)
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const SliverToBoxAdapter(
-                      child: Center(child: CircularProgressIndicator()),
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 64),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
                     );
                   }
 
                   if (snapshot.hasError) {
                     return const SliverToBoxAdapter(
-                      child: Center(child: Text('Error loading events')),
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 64),
+                        child: Center(child: Text('Error loading events')),
+                      ),
                     );
                   }
 
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return const SliverToBoxAdapter(
-                      child: Center(child: Text('No events found')),
+                      child: _EmptyState(
+                        title: "No events found",
+                        subtitle: "Check back later or adjust your filters.",
+                      ),
                     );
                   }
 
@@ -335,19 +271,21 @@ if (showFilter)
                     return EventModel.fromMap(data, doc.id);
                   }).toList();
 
-                  /// 🔹 Apply Search Filter
+                  // Text search
                   if (searchQuery.isNotEmpty) {
-                    events = events.where((e) {
-                      final q = searchQuery.toLowerCase();
-                      return e.title.toLowerCase().contains(q) ||
-                          e.description.toLowerCase().contains(q) ||
-                          e.category.toLowerCase().contains(q);
-                    }).toList();
+                    final q = searchQuery.toLowerCase();
+                    events = events
+                        .where((e) =>
+                            e.title.toLowerCase().contains(q) ||
+                            e.description.toLowerCase().contains(q) ||
+                            e.category.toLowerCase().contains(q))
+                        .toList();
                   }
 
-                  /// 🔹 Apply Dropdown Filters
+                  // Filters
                   if (selectedEventType != "All Types") {
-                    events = events.where((e) => e.category == selectedEventType).toList();
+                    events =
+                        events.where((e) => e.category == selectedEventType).toList();
                   }
                   if (selectedHall != "All Venues") {
                     events = events.where((e) => e.venue == selectedHall).toList();
@@ -363,7 +301,7 @@ if (showFilter)
                           .toList();
                     } else if (selectedDateRange == "This Week") {
                       final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-                      final endOfWeek = startOfWeek.add(const Duration(days: 6));
+                      final endOfWeek = startOfWeek.add(const Duration(days: 7));
                       events = events
                           .where((e) =>
                               e.startDateTime.isAfter(startOfWeek) &&
@@ -378,21 +316,31 @@ if (showFilter)
                     }
                   }
 
+                  if (events.isEmpty) {
+                    return const SliverToBoxAdapter(
+                      child: _EmptyState(
+                        title: "No matching events",
+                        subtitle:
+                            "Try changing the filters or clearing your search.",
+                      ),
+                    );
+                  }
+
+                  final cols = _gridColumnsForWidth(width);
+
                   return SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                     sliver: SliverGrid(
                       delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final event = events[index];
-                          return _eventCard(event);
-                        },
+                        (context, index) => _EventCard(event: events[index]),
                         childCount: events.length,
                       ),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: cols,
                         mainAxisSpacing: 16,
                         crossAxisSpacing: 16,
-                        childAspectRatio: 1.2,
+                        childAspectRatio: 1.18,
                       ),
                     ),
                   );
@@ -403,187 +351,288 @@ if (showFilter)
             ],
           ),
 
-          /// 🔹 Header Top
+          // Header
           Positioned(
             top: 0,
             left: 0,
             right: 0,
             child: HomeHeaderDesktop(
-              onMenuTap: () => _scaffoldKey.currentState?.openEndDrawer(), title: 'Event Page',
-             
+              onMenuTap: () => _scaffoldKey.currentState?.openEndDrawer(),
+              title: 'Event Page',
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  /// 🔹 Event Card
-  Widget _eventCard(EventModel event) {
+class _LabeledDropdown extends StatelessWidget {
+  final String label;
+  final String value;
+  final List<String> items;
+  final ValueChanged<String> onChanged;
+
+  const _LabeledDropdown({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black87)),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          value: value,
+          items: items
+              .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+              .toList(),
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            filled: true,
+            fillColor: Colors.grey.shade100,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EventCard extends StatefulWidget {
+  final EventModel event;
+  const _EventCard({required this.event});
+
+  @override
+  State<_EventCard> createState() => _EventCardState();
+}
+
+class _EventCardState extends State<_EventCard> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = widget.event;
     final now = DateTime.now();
-    final daysLeft = event.startDateTime.difference(now).inDays;
+    final daysLeft = e.startDateTime.difference(now).inDays;
     final daysLeftText = daysLeft <= 0 ? "Today" : "$daysLeft days left";
-
-    final formattedDate = DateFormat("d MMM").format(event.startDateTime);
-    
+    final formattedDate = DateFormat("d MMM").format(e.startDateTime);
     final formattedTime =
-        "${DateFormat("h:mm a").format(event.startDateTime)} - ${DateFormat("h:mm a").format(event.endDateTime)}";
+        "${DateFormat("h:mm a").format(e.startDateTime)} - ${DateFormat("h:mm a").format(e.endDateTime)}";
 
-    return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => EventDetailPage(eventId: event.id)),
-        );
-      },
-      child: Container(
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+        transform: _hover
+            ? (Matrix4.identity()..translate(0.0, -4.0))
+            : Matrix4.identity(),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: const [
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
             BoxShadow(
-              color: Colors.black12,
-              blurRadius: 6,
-              offset: Offset(0, 3),
+              color: Colors.black.withOpacity(_hover ? 0.12 : 0.07),
+              blurRadius: _hover ? 18 : 10,
+              offset: const Offset(0, 8),
             ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                  child: CachedNetworkImage(
-                    imageUrl: event.imageUrl,
-                    height: 120,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => EventDetailPageDesktop(eventId: e.id)),
+            );
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Image with gradient + badges
+              Stack(
+                children: [
+                  CachedNetworkImage(
+                    imageUrl: e.imageUrl,
+                    height: 150,
                     width: double.infinity,
                     fit: BoxFit.cover,
-                    placeholder: (context, url) =>
-                        const Center(child: CircularProgressIndicator()),
-                    errorWidget: (context, url, error) =>
-                        const Icon(Icons.broken_image, size: 48),
-                  ),
-                ),
-                Positioned(
-                  top: 8,
-                  left: 8,
-                  child: Container(
-                    width: 50,
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(4),
+                    placeholder: (_, __) => Container(
+                      height: 150,
+                      color: Colors.grey.shade200,
+                      alignment: Alignment.center,
+                      child: const CircularProgressIndicator(strokeWidth: 2),
                     ),
-                    child: Column(
-                      children: [
-                        Text(
-                          DateFormat("d").format(event.startDateTime),
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                    errorWidget: (_, __, ___) => Container(
+                      height: 150,
+                      color: Colors.grey.shade200,
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.broken_image, size: 40),
+                    ),
+                  ),
+                  // gradient
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withOpacity(.15),
+                            Colors.transparent,
+                            Colors.black.withOpacity(.28),
+                          ],
                         ),
-                        Text(
-                          DateFormat("MMM").format(event.startDateTime).toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 8,
-                  left: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      event.category,
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 8,
-                  right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      daysLeftText,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    event.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  // date badge
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Container(
+                      width: 56,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            DateFormat("d").format(e.startDateTime),
+                            style: const TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.w800),
+                          ),
+                          Text(
+                            DateFormat("MMM").format(e.startDateTime).toUpperCase(),
+                            style: const TextStyle(
+                                fontSize: 11, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    event.description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13, color: Colors.black54),
+                  // category badge
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: _chip(e.category, Colors.green),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.access_time, size: 14, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text(formattedTime, style: const TextStyle(fontSize: 12)),
-                    ],
-                  ),
-                  const SizedBox(height: 4,),
-                  Row(
-  children: [
-    const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
-    const SizedBox(width: 4),
-    Text(
-      formattedDate,
-      style: const TextStyle(fontSize: 12, color: Colors.black87),
-    ),
-  ],
-),
-const SizedBox(height: 4),
-
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on, size: 14, color: Colors.green),
-                      const SizedBox(width: 4),
-                      Text(event.venue, style: const TextStyle(fontSize: 12)),
-                    ],
+                  // time-left badge
+                  Positioned(
+                    bottom: 10,
+                    right: 10,
+                    child: _chip(daysLeftText, Colors.blue),
                   ),
                 ],
               ),
-            ),
-          ],
+
+              // Body
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      e.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      e.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13, color: Colors.black54),
+                    ),
+                    const SizedBox(height: 10),
+                    _metaRow(Icons.access_time, formattedTime),
+                    const SizedBox(height: 4),
+                    _metaRow(Icons.calendar_month, formattedDate),
+                    const SizedBox(height: 4),
+                    _metaRow(Icons.location_on, e.venue, iconColor: Colors.green),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _metaRow(IconData icon, String text, {Color iconColor = Colors.grey}) {
+    return Row(
+      children: [
+        Icon(icon, size: 15, color: iconColor),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 12, color: Colors.black87),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _chip(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+            color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  const _EmptyState({required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 64),
+      child: Column(
+        children: [
+          Icon(Icons.inbox_outlined, size: 56, color: Colors.grey.shade400),
+          const SizedBox(height: 12),
+          Text(title,
+              style:
+                  const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          const SizedBox(height: 6),
+          Text(subtitle, style: TextStyle(color: Colors.grey.shade600)),
+        ],
       ),
     );
   }

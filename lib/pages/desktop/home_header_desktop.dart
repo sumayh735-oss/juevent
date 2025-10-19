@@ -15,7 +15,8 @@ class HomeHeaderDesktop extends StatelessWidget implements PreferredSizeWidget {
 
   const HomeHeaderDesktop({
     super.key,
-    required this.onMenuTap, required String title,
+    required this.onMenuTap,
+    required String title, // still accepted to keep your calls intact
   });
 
   @override
@@ -26,7 +27,6 @@ class HomeHeaderDesktop extends StatelessWidget implements PreferredSizeWidget {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      // Haddii user aanu login ahayn
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const LoginpageDesktop()),
@@ -35,20 +35,16 @@ class HomeHeaderDesktop extends StatelessWidget implements PreferredSizeWidget {
     }
 
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
 
       if (!doc.exists || doc.data()?['role'] != 'admin') {
-        // User exists laakiin ma aha admin
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("❌ You are not allowed to access Admin.")),
         );
         return;
       }
 
-      // Haddii uu admin yahay
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const AdminDashboardDesktop()),
@@ -62,7 +58,7 @@ class HomeHeaderDesktop extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    String formattedDate = DateFormat('EEE, MMM d').format(DateTime.now());
+    final formattedDate = DateFormat('EEE, MMM d').format(DateTime.now());
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
@@ -107,7 +103,7 @@ class HomeHeaderDesktop extends StatelessWidget implements PreferredSizeWidget {
               MaterialPageRoute(builder: (context) => const BookingFormDesktop()),
             );
           }),
-           _navLink("Profile", () {
+          _navLink("Profile", () {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => const ProfileDesktop()),
@@ -126,21 +122,79 @@ class HomeHeaderDesktop extends StatelessWidget implements PreferredSizeWidget {
           ),
           const SizedBox(width: 20),
 
-          // Login button
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginpageDesktop()),
+          // Login / Logout (auth-aware)
+          StreamBuilder<User?>(
+            stream: FirebaseAuth.instance.authStateChanges(),
+            builder: (context, snap) {
+              final user = snap.data;
+
+              if (user == null) {
+                // Not logged in -> show Login
+                return ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const LoginpageDesktop()),
+                    );
+                  },
+                  icon: const Icon(Icons.person, size: 18),
+                  label: const Text("Login"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade700,
+                    foregroundColor: Colors.white,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                );
+              }
+
+              // Logged in -> show avatar + Logout
+              final display = (user.displayName?.trim().isNotEmpty ?? false)
+                  ? user.displayName!.trim()
+                  : (user.email ?? 'User');
+              final initial = display.trim().isNotEmpty
+                  ? display.trim()[0].toUpperCase()
+                  : 'U';
+
+              return Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.white24,
+                    child: Text(initial,
+                        style: const TextStyle(color: Colors.white)),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await FirebaseAuth.instance.signOut();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Logged out')),
+                        );
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const HomepageDesktop()),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.logout, size: 18, color: Colors.white),
+                    label: const Text(
+                      "Logout",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.white54),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                    ),
+                  ),
+                ],
               );
             },
-            icon: const Icon(Icons.person, size: 18),
-            label: const Text("Login"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade700,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            ),
           ),
         ],
       ),
