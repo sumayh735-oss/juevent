@@ -36,8 +36,7 @@
     }
   ],
   "hosting": {
-    "site": "eventdb-3c41d",
-    "public": "build/web",
+    "public": "y",
     "ignore": [
       "firebase.json",
       "**/.*",
