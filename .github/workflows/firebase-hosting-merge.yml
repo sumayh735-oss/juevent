@@ -19,8 +19,8 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          fix: update Flutter version to 3.35.5 for CI build
- # ama version-ka aad isticmaasho
+          channel: 'stable'
+          flutter-version: '3.35.5'
 
       - name: Install dependencies
         run: flutter pub get
